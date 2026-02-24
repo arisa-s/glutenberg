@@ -1,0 +1,120 @@
+<% content_for(:title) { @recipe.title } %>
+
+<div class="window">
+    <div class="title-bar">
+        <button aria-label="Close" class="close"></button>
+        <h1 class="title"><%= @recipe.title || "(Untitled Recipe)" %></h1>
+        <button aria-label="Resize" class="resize"></button>
+    </div>
+
+    <div class="details-bar">
+        <span><%= link_to @source.title.truncate(40), source_path(@source) %></span>
+        <span>·</span>
+        <span><%= @source.author || "Unknown" %></span>
+        <span>·</span>
+        <span><%= @source.publication_year || "?" %></span>
+    </div>
+
+    <div class="separator"></div>
+
+    <%# Recipe metadata %>
+    <div class="window-pane">
+        <dl class="meta-grid">
+            <dt>Source</dt>
+            <dd><%= link_to @source.title, source_path(@source) %></dd>
+
+            <% if @recipe.cook_time.present? || @recipe.prep_time.present? || @recipe.ready_in_minutes.present? %>
+            <dt>Time</dt>
+            <dd>
+                <div class="time-info">
+                    <% if @recipe.prep_time.present? %>
+                    <span>Prep: <%= @recipe.prep_time %> min</span>
+                    <% end %>
+                    <% if @recipe.cook_time.present? %>
+                    <span>Cook: <%= @recipe.cook_time %> min</span>
+                    <% end %>
+                    <% if @recipe.ready_in_minutes.present? %>
+                    <span>Total: <%= @recipe.ready_in_minutes %> min</span>
+                    <% end %>
+                </div>
+            </dd>
+            <% end %>
+
+            <% if @recipe.yield_amount.present? %>
+            <dt>Yield</dt>
+            <dd><%= @recipe.yield_amount %><%= " – #{@recipe.yield_amount_max}" if @recipe.yield_amount_max.present? %> <%= @recipe.yield_unit %></dd>
+            <% end %>
+
+            <dt>Status</dt>
+            <dd>
+                <span class="badge badge-<%= @recipe.extraction_status == 'success' ? 'success' : 'failed' %>">
+                    <%= @recipe.extraction_status %>
+                </span>
+                <% if @recipe.extracted_at.present? %>
+                · extracted <%= time_ago_in_words(@recipe.extracted_at) %> ago
+                <% end %>
+            </dd>
+        </dl>
+    </div>
+
+    <%# Ingredients section %>
+    <div class="separator"></div>
+    <div class="section-header">Ingredients (<%= @recipe.ingredients.count %>)</div>
+
+    <% if @recipe.ingredient_groups.any? %>
+    <% @recipe.ingredient_groups.order(:order).each do |group| %>
+    <% if group.name.present? %>
+    <div class="group-name"><%= group.name %></div>
+    <% end %>
+
+    <ul class="ingredient-list">
+        <% group.ingredients.order(:order).each do |ingredient| %>
+        <li>
+            <%= highlight_product(ingredient.original_string, ingredient.product) %>
+            <% if ingredient.foundation_food_name.present? %>
+            <span class="foundation-food">
+                ↝ <%= ingredient.foundation_food_name %>
+                <% if ingredient.foundation_food_category.present? %>
+                [<%= ingredient.foundation_food_category %>]
+                <% end %>
+            </span>
+            <% end %>
+        </li>
+        <% end %>
+    </ul>
+    <% end %>
+    <% else %>
+    <div class="window-pane">
+        <div class="empty-state">No ingredients extracted.</div>
+    </div>
+    <% end %>
+
+    <%# Instructions section %>
+    <div class="separator"></div>
+    <div class="section-header">Instructions (<%= @recipe.instructions.count %>)</div>
+
+    <div class="window-pane">
+        <% if @recipe.instruction_groups.any? %>
+        <% @recipe.instruction_groups.order(:order).each do |group| %>
+        <% if group.name.present? %>
+        <div class="group-name"><%= group.name %></div>
+        <% end %>
+
+        <ol class="instruction-list">
+            <% group.instructions.order(:order).each do |instruction| %>
+            <li><%= instruction.step %></li>
+            <% end %>
+        </ol>
+        <% end %>
+        <% else %>
+        <div class="empty-state">No instructions extracted.</div>
+        <% end %>
+    </div>
+
+    <%# Original text section (optional) %>
+    <% if @recipe.input_text.present? %>
+    <div class="separator"></div>
+    <div class="section-header">Original Text</div>
+    <pre class="original-text"><%= @recipe.input_text %></pre>
+    <% end %>
+</div>

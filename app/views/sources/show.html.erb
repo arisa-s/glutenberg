@@ -1,0 +1,146 @@
+<% content_for(:title) { @source.title } %>
+
+<div class="window">
+  <div class="title-bar">
+    <button aria-label="Close" class="close"></button>
+    <h1 class="title"><%= @source.title %></h1>
+    <button aria-label="Resize" class="resize"></button>
+  </div>
+
+  <div class="details-bar">
+    <span><%= @source.author || "Unknown author" %></span>
+    <span>·</span>
+    <span><%= @source.publication_year || "Year unknown" %></span>
+    <span>·</span>
+    <span><%= @source.region_country || "Unknown origin" %></span>
+    <span>·</span>
+    <span><%= @recipes.count %> recipes</span>
+  </div>
+
+  <div class="separator"></div>
+
+  <%# Metadata section %>
+  <div class="window-pane">
+    <% if @source.image_url.present? %>
+      <%= image_tag @source.image_url, class: "book-cover book-cover-lg", alt: @source.title %>
+    <% end %>
+    <dl class="meta-grid">
+      <dt>Author</dt>
+      <dd><%= @source.author || "Unknown" %></dd>
+
+      <dt>Year</dt>
+      <dd><%= @source.publication_year || "Unknown" %></dd>
+
+      <dt>Provider</dt>
+      <dd><%= @source.provider %> (#<%= @source.external_id %>)</dd>
+
+      <dt>Country</dt>
+      <dd><%= @source.region_country || "—" %></dd>
+
+      <% if @source.region_city.present? %>
+        <dt>City</dt>
+        <dd><%= @source.region_city %></dd>
+      <% end %>
+
+      <dt>Language</dt>
+      <dd><%= @source.language %></dd>
+
+      <dt>Strategy</dt>
+      <dd><%= @source.split_strategy || "—" %></dd>
+
+      <% if @source.source_url.present? %>
+        <dt>Source URL</dt>
+        <dd><%= link_to @source.source_url.truncate(60), @source.source_url, target: "_blank" %></dd>
+      <% end %>
+
+      <dt>In corpus</dt>
+      <dd>
+        <%= button_to source_path(@source),
+              method: :patch,
+              params: { source: { included_in_corpus: !@source.included_in_corpus } },
+              class: "corpus-toggle #{@source.included_in_corpus ? 'corpus-on' : 'corpus-off'}" do %>
+          <%= @source.included_in_corpus ? "✓ Included" : "✗ Excluded" %>
+        <% end %>
+      </dd>
+    </dl> 
+  </div>
+
+  <%# Notes section %>
+  <div class="separator"></div>
+  <div class="section-header">Arisa's Note</div>
+
+  <div class="window-pane">
+    <% if flash[:notice] %>
+      <div style="font-size: 0.8rem; font-style: italic; margin-bottom: 6px;"><%= flash[:notice] %></div>
+    <% end %>
+
+    <%= form_with(model: @source, method: :patch, style: "margin: 0;") do |f| %>
+      <%= f.text_area :notes,
+            rows: 4,
+            style: "width: 100%; font-size: 0.85rem; font-family: Chicago, 'Geneva', monospace; padding: 4px; box-sizing: border-box; resize: vertical;",
+            placeholder: "Add notes about this source..." %>
+      <div style="margin-top: 4px;">
+        <%= f.submit "Save", class: "btn" %>
+      </div>
+    <% end %>
+  </div>
+
+  <%# Recipes section %>
+  <div class="separator"></div>
+  <div class="section-header">Recipes (<%= @recipes.count %>)</div>
+
+  <% failed_with_text = @recipes.select { |r| r.extraction_status == 'failed' && r.input_text.present? } %>
+  <% if failed_with_text.any? %>
+    <div class="window-pane" style="margin-bottom: 0;">
+      <%= button_to "Bulk retry failed (#{failed_with_text.size})",
+            bulk_retry_failed_extractions_source_path(@source),
+            method: :post,
+            class: "btn",
+            data: { confirm: "Retry extraction for #{failed_with_text.size} failed chunk(s)?" } %>
+    </div>
+  <% end %>
+
+  <div class="window-pane">
+    <% if @recipes.any? %>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Title</th>
+            <th>Ingredients</th>
+            <th>Instructions</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @recipes.each_with_index do |recipe, idx| %>
+            <tr>
+              <td><%= idx + 1 %></td>
+              <td>
+                <%= link_to(recipe.title.presence || "(untitled)", source_recipe_path(@source, recipe)) %>
+              </td>
+              <td><%= recipe.ingredients.count %></td>
+              <td><%= recipe.instructions.count %></td>
+              <td>
+                <span class="badge badge-<%= recipe.extraction_status == 'success' ? 'success' : 'failed' %>">
+                  <%= recipe.extraction_status %>
+                </span>
+                <% if recipe.extraction_status == 'failed' && recipe.input_text.present? %>
+                  <%= button_to "Retry",
+                        retry_extraction_source_recipe_path(@source, recipe),
+                        method: :post,
+                        class: "btn btn-small" %>
+                <% end %>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    <% else %>
+      <div class="empty-state">
+        No recipes extracted yet.<br>
+        Run <code>rails "gutenberg:process[<%= @source.id %>]"</code> to extract.
+      </div>
+    <% end %>
+  </div>
+</div>

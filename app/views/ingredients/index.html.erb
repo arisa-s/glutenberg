@@ -1,0 +1,106 @@
+<% content_for(:title) { "Ingredients" } %>
+
+<div class="window">
+  <div class="title-bar">
+    <button aria-label="Close" class="close"></button>
+    <h1 class="title">Ingredients</h1>
+    <button aria-label="Resize" class="resize"></button>
+  </div>
+
+  <div class="details-bar">
+    <span><strong><%= @total_count %></strong> entries</span>
+    <span>·</span>
+    <span><strong><%= @unique_products %></strong> unique products</span>
+    <span>·</span>
+    <span><strong><%= @categories.size %></strong> FDC categories</span>
+  </div>
+
+  <div class="separator"></div>
+
+  <%# Search & filter bar %>
+  <div class="window-pane" style="padding-bottom: 0;">
+    <%= form_tag ingredients_path, method: :get, style: "display: flex; gap: 8px; align-items: center; flex-wrap: wrap;" do %>
+      <input type="text" name="search" value="<%= params[:search] %>"
+             placeholder="Search product name…" style="flex: 1; min-width: 150px;">
+      <select name="category" style="max-width: 220px;">
+        <option value="">All categories</option>
+        <% @categories.each do |cat| %>
+          <option value="<%= cat %>" <%= 'selected' if params[:category] == cat %>><%= cat %></option>
+        <% end %>
+      </select>
+      <button type="submit">Filter</button>
+      <% if params[:search].present? || params[:category].present? || params[:product].present? %>
+        <%= link_to "Clear", ingredients_path, style: "font-size: 0.8rem;" %>
+      <% end %>
+    <% end %>
+  </div>
+
+  <div class="separator"></div>
+
+  <div class="window-pane">
+    <% if @ingredients.any? %>
+      <table>
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Qty</th>
+            <th>Unit</th>
+            <th>Substitutions</th>
+            <th>FDC Name</th>
+            <th>FDC Category</th>
+            <th>Recipe</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @ingredients.each do |ingredient| %>
+            <tr>
+              <td>
+                <strong><%= ingredient.product || "—" %></strong>
+                <% if ingredient.preparation.present? %>
+                  <span class="preparation-note"><%= ingredient.preparation %></span>
+                <% end %>
+              </td>
+              <td><%= ingredient.quantity %><%= "–#{ingredient.quantity_max}" if ingredient.quantity_max.present? %></td>
+              <td><%= ingredient.unit || "—" %></td>
+              <td>
+                <% if ingredient.substitutions.any? %>
+                  <span class="substitutions">
+                    <%= ingredient.substitutions.map(&:product).join(", ") %>
+                  </span>
+                <% else %>
+                  —
+                <% end %>
+              </td>
+              <td><%= ingredient.foundation_food_name || "—" %></td>
+              <td>
+                <% if ingredient.foundation_food_category.present? %>
+                  <%= link_to ingredient.foundation_food_category, ingredients_path(category: ingredient.foundation_food_category) %>
+                <% else %>
+                  —
+                <% end %>
+              </td>
+              <td>
+                <% recipe = ingredient.recipe %>
+                <% if recipe %>
+                  <%= link_to (recipe.title || "(Untitled)").truncate(30),
+                      source_recipe_path(recipe.source, recipe) %>
+                <% else %>
+                  —
+                <% end %>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    <% else %>
+      <div class="empty-state">
+        No ingredients found.<br>
+        <% if params[:search].present? || params[:category].present? %>
+          Try adjusting your filters.
+        <% else %>
+          Process some recipes first to populate ingredients.
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+</div>

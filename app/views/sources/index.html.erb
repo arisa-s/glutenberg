@@ -1,0 +1,25 @@
+<% content_for(:title) { "Sources" } %>
+
+<div class="window">
+  <div class="title-bar">
+    <button aria-label="Close" class="close"></button>
+    <h1 class="title">Cookbook sources</h1>
+    <button aria-label="Resize" class="resize"></button>
+  </div>
+
+  <div class="details-bar">
+    <%= link_to "All", sources_path(corpus: nil), class: @corpus_filter.blank? ? "active" : "" %>
+    <%= link_to "In corpus", sources_path(corpus: "included"), class: (@corpus_filter == "included") ? "active" : "" %>
+    <%= link_to "Excluded", sources_path(corpus: "excluded"), class: (@corpus_filter == "excluded") ? "active" : "" %>
+  </div>
+
+  <div class="separator"></div>
+
+  <div class="window-pane">
+    <ul>
+      <% @sources.each do |source| %>
+        <li><%= link_to source.title, source_path(source) %> — <%= source.author %> (<%= source.publication_year %>) · <%= source.recipes.count %> recipes</li>
+      <% end %>
+    </ul>
+  </div>
+</div>
