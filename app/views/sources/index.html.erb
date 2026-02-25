@@ -3,23 +3,71 @@
 <div class="window">
   <div class="title-bar">
     <button aria-label="Close" class="close"></button>
-    <h1 class="title">Cookbook sources</h1>
+    <h1 class="title">Cookbook Sources</h1>
     <button aria-label="Resize" class="resize"></button>
   </div>
 
   <div class="details-bar">
-    <%= link_to "All", sources_path(corpus: nil), class: @corpus_filter.blank? ? "active" : "" %>
-    <%= link_to "In corpus", sources_path(corpus: "included"), class: (@corpus_filter == "included") ? "active" : "" %>
-    <%= link_to "Excluded", sources_path(corpus: "excluded"), class: (@corpus_filter == "excluded") ? "active" : "" %>
+    <%= link_to "All (#{Source.count})", sources_path %>
+    <span>·</span>
+    <%= link_to "In corpus (#{Source.included.count})", sources_path(corpus: "included") %>
+    <span>·</span>
+    <%= link_to "Excluded (#{Source.excluded.count})", sources_path(corpus: "excluded") %>
   </div>
 
   <div class="separator"></div>
 
   <div class="window-pane">
-    <ul>
-      <% @sources.each do |source| %>
-        <li><%= link_to source.title, source_path(source) %> — <%= source.author %> (<%= source.publication_year %>) · <%= source.recipes.count %> recipes</li>
-      <% end %>
-    </ul>
+    <% if @sources.any? %>
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th>Title</th>
+            <th>Author</th>
+            <th>Year</th>
+            <th>Country</th>
+            <th>Provider</th>
+            <th>Recipes</th>
+            <th>Failed</th>
+            <th>Corpus</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @sources.each do |source| %>
+            <% failed_count = @failed_recipe_counts[source.id].to_i %>
+            <tr>
+              <td>
+                <% if source.image_url.present? %>
+                  <%= image_tag source.image_url, class: "book-cover book-cover-sm", alt: source.title %>
+                <% end %>
+              </td>
+              <td><%= link_to source.title, source_path(source) %></td>
+              <td><%= source.author || "—" %></td>
+              <td><%= source.publication_year || "—" %></td>
+              <td><%= source.region_country || "—" %></td>
+              <td><%= source.provider %></td>
+              <td><%= source.recipes.count %></td>
+              <td>
+                <% if failed_count == 0 %>
+                  <span class="badge badge-success" title="No failed extractions (or all failed marked not a recipe)">✓</span>
+                <% else %>
+                  <%= failed_count %>
+                <% end %>
+              </td>
+              <td>
+                <span class="badge badge-<%= source.included_in_corpus? ? 'success' : 'failed' %>">
+                  <%= source.included_in_corpus? ? "✓" : "✗" %>
+                </span>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    <% else %>
+      <div class="empty-state">
+        No sources found.
+      </div>
+    <% end %>
   </div>
 </div>

@@ -31,7 +31,11 @@ module Gutenberg
 
           next if body.blank?
 
-          chunks << "#{title}\n\n#{body}"
+          chunks << {
+            text: "#{title}\n\n#{body}",
+            section_header: nil,
+            page_number: find_page_number(title_node)
+          }
         end
 
         chunks

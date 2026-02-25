@@ -8,6 +8,7 @@ Rails.application.routes.draw do
     resources :recipes, only: [:show, :update] do
       member do
         post :retry_extraction
+        post :split_and_reextract
       end
     end
   end

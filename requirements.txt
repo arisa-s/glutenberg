@@ -1,0 +1,3 @@
+# Python dependencies for FDC (Food Data Central) foundation food lookup.
+# Used by bin/fdc_lookup.py to enrich extracted ingredients with USDA food data.
+ingredient-parser-nlp>=2.5.0

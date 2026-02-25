@@ -9,6 +9,13 @@ class SourcesController < ApplicationController
                else @sources
                end
     @corpus_filter = params[:corpus]
+    # Count of recipes that are failed and still considered a recipe (not_a_recipe: false)
+    @failed_recipe_counts = Recipe.unscoped
+      .where(source_id: @sources.select(:id))
+      .where(extraction_status: "failed")
+      .where(not_a_recipe: false)
+      .group(:source_id)
+      .count
   end
 
   def show

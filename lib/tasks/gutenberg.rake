@@ -300,10 +300,10 @@ namespace :gutenberg do
     end
 
     puts
-    confirm!("Send #{selected_chunks.size} chunk(s) to Flask for extraction?")
+    confirm!("Send #{selected_chunks.size} chunk(s) to LLM for extraction?")
 
     # Step 3: Extract
-    log_step 3, 3, "Extracting #{selected_chunks.size} recipes via Flask..."
+    log_step 3, 3, "Extracting #{selected_chunks.size} recipes via LLM..."
 
     success = 0
     failed = 0
@@ -350,7 +350,7 @@ namespace :gutenberg do
         puts "ERROR: #{e.message.truncate(80)}"
       end
 
-      # Small delay to avoid overwhelming Flask
+      # Small delay between LLM calls to avoid rate limits
       sleep(0.5)
     end
 

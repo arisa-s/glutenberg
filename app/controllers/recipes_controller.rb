@@ -41,6 +41,28 @@ class RecipesController < ApplicationController
     redirect_to path, alert: "Retry failed: #{e.message}"
   end
 
+  def split_and_reextract
+    @source = Source.find(params[:source_id])
+    @recipe = @source.recipes.unscoped.find(params[:id])
+
+    if @recipe.input_text.blank?
+      redirect_to source_recipe_path(@source, @recipe), alert: "Cannot split: no input text saved for this recipe."
+      return
+    end
+
+    result = Extraction::SplitAndReextractService.call(recipe: @recipe)
+
+    if result[:split]
+      count = result[:new_recipes].size
+      redirect_to source_path(@source), notice: "Split into #{count} recipes. Original marked as not-a-recipe."
+    else
+      redirect_to source_recipe_path(@source, @recipe), alert: "No split performed: #{result[:reason]}"
+    end
+  rescue StandardError => e
+    path = (@source && @recipe) ? source_recipe_path(@source, @recipe) : source_path(params[:source_id])
+    redirect_to path, alert: "Split failed: #{e.message}"
+  end
+
   private
 
   def recipe_params

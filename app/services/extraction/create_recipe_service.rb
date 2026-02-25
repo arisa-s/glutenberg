@@ -1,12 +1,9 @@
 # frozen_string_literal: true
 
-# Orchestrates the full extraction pipeline: calls the Flask service,
+# Orchestrates the full extraction pipeline: calls the LLM service,
 # normalizes the response, and persists a Recipe with its associated
 # IngredientGroups, Ingredients, InstructionGroups, and Instructions
 # using bulk inserts for performance.
-#
-# Adapted from souschef-rails-server's BaseRecipeScraperService but
-# simplified: no background jobs, no product matching, no image processing.
 #
 # Usage:
 #   recipe = Extraction::CreateRecipeService.call(
@@ -22,10 +19,9 @@
 #   )
 module Extraction
   class CreateRecipeService
-    # Columns from Flask response that map to the ingredients table.
     INGREDIENT_COLUMNS = %w[original_string product quantity unit preparation comment quantity_max].freeze
 
-    # Foundation food fields from ingredient-parser via Flask.
+    # Foundation food fields from ingredient-parser-nlp (via Python subprocess).
     FOUNDATION_FOOD_FIELDS = {
       'fdc_id' => :foundation_food_id,
       'text' => :foundation_food_name,
@@ -37,18 +33,19 @@ module Extraction
       new(...).call
     end
 
-    def initialize(source:, text: nil, images: nil, input_type: nil, page_number: nil, extractor_version: nil,
-                   raw_section_header: nil, historical: true, recipe: nil, recipe_number: nil)
+    def initialize(source:, text: nil, input_type: nil, page_number: nil, extractor_version: nil,
+                   raw_section_header: nil, historical: true, recipe: nil, recipe_number: nil,
+                   llm_response: nil)
       @source = source
       @recipe = recipe
       @text = text || (recipe&.input_text)
-      @images = images
-      @input_type = input_type || (recipe&.input_type) || (images.present? ? 'images' : 'text')
+      @input_type = input_type || (recipe&.input_type) || 'text'
       @page_number = page_number || recipe&.page_number
-      @extractor_version = extractor_version || ENV["FLASK_SERVICE_VERSION"] || Recipe::EXTRACTOR_VERSION
+      @extractor_version = extractor_version || ENV.fetch("EXTRACTOR_VERSION", Recipe::EXTRACTOR_VERSION)
       @raw_section_header = raw_section_header || recipe&.raw_section_header
       @historical = historical
       @recipe_number = recipe_number || recipe&.recipe_number
+      @llm_response = llm_response
     end
 
     def call
@@ -57,13 +54,13 @@ module Extraction
         @recipe.instruction_groups.destroy_all
       end
 
-      flask_response = extract_from_flask
-      return create_failed_recipe("Flask returned nil") if flask_response.nil?
+      response = extract_recipe
+      return create_failed_recipe("LLM returned nil") if response.nil?
 
       Recipe.transaction do
-        @recipe = create_or_update_recipe(flask_response)
-        bulk_insert_ingredient_groups(format_ingredient_groups(flask_response['ingredient_groups']))
-        bulk_insert_instruction_groups(format_instruction_groups(flask_response['instruction_groups']))
+        @recipe = create_or_update_recipe(response)
+        bulk_insert_ingredient_groups(format_ingredient_groups(response['ingredient_groups']))
+        bulk_insert_instruction_groups(format_instruction_groups(response['instruction_groups']))
         @recipe
       end
     rescue StandardError => e
@@ -73,19 +70,16 @@ module Extraction
     private
 
     # ---------------------------------------------------------------
-    # Flask API call
+    # LLM extraction (replaces Flask API call)
     # ---------------------------------------------------------------
 
-    def extract_from_flask
-      if @images.present?
-        FlaskClient::ExtractFromImages.call(images: @images, language: @source.language || 'en')
-      else
-        FlaskClient::ExtractFromText.call(
-          text: @text,
-          language: @source.language || 'en',
-          historical: @historical
-        )
-      end
+    def extract_recipe
+      return @llm_response if @llm_response.present?
+
+      Llm::ExtractRecipeFromText.call(
+        text: @text,
+        historical: @historical
+      )
     end
 
     # ---------------------------------------------------------------

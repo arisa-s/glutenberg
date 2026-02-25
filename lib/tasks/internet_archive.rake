@@ -9,7 +9,7 @@
 #   - Splitter strategies work with plain text (not Nokogiri/HTML)
 #
 # The extraction step is identical — both pipelines feed text chunks into
-# Extraction::CreateRecipeService, which calls the same Flask service.
+# Extraction::CreateRecipeService, which calls the LLM directly via OpenRouter.
 
 namespace :ia do
   desc 'Import an Internet Archive source by identifier. ' \
@@ -292,10 +292,10 @@ namespace :ia do
     end
 
     puts
-    confirm!("Send #{selected_chunks.size} chunk(s) to Flask for extraction?")
+    confirm!("Send #{selected_chunks.size} chunk(s) to LLM for extraction?")
 
     # Step 3: Extract
-    log_step 3, 3, "Extracting #{selected_chunks.size} recipes via Flask..."
+    log_step 3, 3, "Extracting #{selected_chunks.size} recipes via LLM..."
 
     success = 0
     failed = 0
@@ -342,7 +342,7 @@ namespace :ia do
         puts "ERROR: #{e.message.truncate(80)}"
       end
 
-      # Small delay to avoid overwhelming Flask
+      # Small delay between LLM calls to avoid rate limits
       sleep(0.5)
     end
 

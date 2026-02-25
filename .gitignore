@@ -10,6 +10,7 @@
 # Ignore all environment files (except templates).
 /.env*
 !/.env*.erb
+!/.env.example
 
 # Ignore all logfiles and tempfiles.
 /log/*
@@ -31,3 +32,4 @@
 
 # Ignore master key for decrypting credentials and more.
 /config/master.key
+.DS_Store

@@ -21,7 +21,7 @@ class Recipe < ApplicationRecord
   # Version of the extraction pipeline (Flask/souschef) that produced this recipe.
   # Stored on each recipe for reproducibility and debugging. Override at runtime
   # with ENV["EXTRACTOR_VERSION"] if needed (e.g. in CI or per deployment).
-  EXTRACTOR_VERSION = ENV.fetch("EXTRACTOR_VERSION", "souschef-flask-1").freeze
+  EXTRACTOR_VERSION = ENV.fetch("EXTRACTOR_VERSION", "native-llm").freeze
 
   # Exclude recipes marked "text is not a recipe" from default listing.
   default_scope { where(not_a_recipe: false) }
