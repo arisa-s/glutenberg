@@ -124,7 +124,6 @@ module InternetArchive
               input_type: 'image',
               page_number: start_leaf,
               raw_section_header: @section_header,
-              historical: true,
               llm_response: recipe_data
             )
 

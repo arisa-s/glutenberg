@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Prompts for extracting structured recipes from text.
+# Prompt for extracting structured recipes from historical cookbook text.
 # Ported from souschef-flask-server's constants/prompt/extract_recipe.py.
 
 module Llm
@@ -56,9 +56,7 @@ module Llm
             {"product": "No. 527", "recipe_ref": {"ref_number": 527, "ref_raw_text": "No. 527"}, ...}
       RULES
 
-      # Historical text extraction prompt (with LLM-parsed ingredients).
-      # Used for Project Gutenberg and Internet Archive cookbook text.
-      FROM_TEXT_HISTORICAL = <<~PROMPT.freeze
+      SYSTEM_PROMPT = <<~PROMPT.freeze
         You are a summarizer bot. Extract a recipe summary from the text in JSON format with fully parsed ingredients.
 
         **Expected JSON structure:**
@@ -90,46 +88,6 @@ module Llm
         **Rules:**
         - Input text is provided in square brackets.
         #{CLEAN_HISTORICAL_OCR}- Return only the JSON object, no commentary.
-        - Include every key from the schema; use null for unknown values.
-        - Ignore non-recipe content.
-        - Return null only if the text contains no food or cooking content at all.
-      PROMPT
-
-      # Modern text extraction prompt (with LLM-parsed ingredients).
-      # Used for non-English or when ingredient-parser library is not applicable.
-      FROM_TEXT_WITH_PARSED_INGREDIENTS = <<~PROMPT.freeze
-        You are a summarizer bot. Extract a recipe summary from the text in JSON format with fully parsed ingredients.
-
-        **Expected JSON structure:**
-        {
-            "title": "<recipe title including recipe number if present>",
-            "ingredient_groups": [
-                #{INGREDIENT_GROUP_PARSED}
-            ],
-            "instruction_groups": [
-                {
-                    "name": "<section title or null>",
-                    "instructions": ["<detailed instruction step>", ...]
-                }
-            ],
-            "prep_time": <minutes or null>,
-            "cook_time": <minutes or null>,
-            "ready_in_minutes": <total minutes or null>,
-            "yield": {
-                "amount": <number or null>,
-                "amount_max": <number if range, otherwise null>,
-                "unit": "<e.g., 'servings', or null>"
-            },
-            "category": "<one of: soup_stew, meat_fish_main, vegetable_side, bread_dough, dessert_baking, sweet_confection, sauce_gravy, preserve_pickle, beverage, breakfast_brunch, household_misc, other_unknown>",
-            "lang": "<two-letter language code, e.g., 'en', 'ja'>"
-        }
-
-        #{Llm::Prompts::RecipeSchema::INGREDIENT_PARSING_RULES}
-
-        **Rules:**
-        - Input text is provided in square brackets.
-        - Preserve original wording and language.
-        - Return only the JSON object, no commentary.
         - Include every key from the schema; use null for unknown values.
         - Ignore non-recipe content.
         - Return null only if the text contains no food or cooking content at all.

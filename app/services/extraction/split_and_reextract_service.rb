@@ -38,8 +38,7 @@ module Extraction
             input_type: @recipe.input_type,
             page_number: @recipe.page_number,
             extractor_version: extractor_version,
-            raw_section_header: @recipe.raw_section_header,
-            historical: true
+            raw_section_header: @recipe.raw_section_header
           )
           recipe.update_column(:notes, "Split from recipe #{@recipe.id}")
           recipe

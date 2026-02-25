@@ -1,15 +1,13 @@
 # frozen_string_literal: true
 
 module Llm
-  # Extracts a structured recipe from plain text via LLM.
+  # Extracts a structured recipe from historical cookbook text via LLM.
   #
-  # For historical text (the primary path for Project Gutenberg / IA):
-  # the LLM parses ingredients into structured form, then FdcEnrichment
+  # The LLM parses ingredients into structured form, then FdcEnrichment
   # adds foundation food metadata from the ingredient-parser library.
   #
   # Usage:
   #   result = Llm::ExtractRecipeFromText.call(text: ocr_text)
-  #   result = Llm::ExtractRecipeFromText.call(text: ocr_text, historical: true)
   class ExtractRecipeFromText
     class NoRecipeFoundError < StandardError; end
 
@@ -28,9 +26,8 @@ module Llm
       new(...).call
     end
 
-    def initialize(text:, historical: true, model: DEFAULT_MODEL, temperature: 0.4)
+    def initialize(text:, model: DEFAULT_MODEL, temperature: 0.4)
       @text = text
-      @historical = historical
       @model = model
       @temperature = temperature
       @client = Llm::OpenRouterClient.new
@@ -40,11 +37,9 @@ module Llm
       raise ArgumentError, 'Text is required' if @text.blank?
 
       normalized = normalize_text(@text)
-      prompt = @historical ? Llm::Prompts::ExtractRecipe::FROM_TEXT_HISTORICAL
-                           : Llm::Prompts::ExtractRecipe::FROM_TEXT_WITH_PARSED_INGREDIENTS
 
       recipe = @client.chat_completion(
-        system_prompt: prompt,
+        system_prompt: Llm::Prompts::ExtractRecipe::SYSTEM_PROMPT,
         user_content: "[#{normalized}]",
         model: @model,
         temperature: @temperature,
@@ -54,9 +49,7 @@ module Llm
       recipe = normalize_recipe_response(recipe)
       ensure_valid_recipe!(recipe)
 
-      if @historical
-        Llm::FdcEnrichment.enrich_ingredient_groups(recipe['ingredient_groups'])
-      end
+      Llm::FdcEnrichment.enrich_ingredient_groups(recipe['ingredient_groups'])
 
       recipe
     end
@@ -65,14 +58,12 @@ module Llm
 
     def normalize_text(text)
       result = normalize_unicode_fractions(text)
-      result = strip_page_markers(result) if @historical
+      result = strip_page_markers(result)
       result.strip
     end
 
-    # Convert Unicode fraction representations to ASCII.
     def normalize_unicode_fractions(text)
       result = text.dup
-      # Composed fractions: superscript + fraction slash (⁄) + subscript
       result.gsub!(/([⁰¹²³⁴⁵⁶⁷⁸⁹]+)\u2044([₀₁₂₃₄₅₆₇₈₉]+)/) do
         num = Regexp.last_match(1).chars.map { |c| SUPERSCRIPT_MAP[c] || c }.join
         den = Regexp.last_match(2).chars.map { |c| SUBSCRIPT_MAP[c] || c }.join
@@ -86,14 +77,12 @@ module Llm
       text.gsub(/\[Pg\s*\d+\]/, '')
     end
 
-    # Normalize common LLM response shape variants.
     def normalize_recipe_response(parsed)
       return parsed unless parsed
 
       parsed = parsed.first if parsed.is_a?(Array) && parsed.first.is_a?(Hash)
       return parsed unless parsed.is_a?(Hash)
 
-      # Unwrap single wrapper key
       if parsed.size == 1
         val = parsed.values.first
         if val.is_a?(Hash) && (val.key?('title') || val.key?('ingredient_groups'))

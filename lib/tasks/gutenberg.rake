@@ -333,8 +333,7 @@ namespace :gutenberg do
           input_type: 'text',
           raw_section_header: section_header,
           page_number: page_number,
-          recipe_number: recipe_number,
-          historical: true
+          recipe_number: recipe_number
         )
 
         if recipe.extraction_status == 'success'

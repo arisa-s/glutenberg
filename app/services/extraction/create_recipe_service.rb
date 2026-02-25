@@ -34,7 +34,7 @@ module Extraction
     end
 
     def initialize(source:, text: nil, input_type: nil, page_number: nil, extractor_version: nil,
-                   raw_section_header: nil, historical: true, recipe: nil, recipe_number: nil,
+                   raw_section_header: nil, recipe: nil, recipe_number: nil,
                    llm_response: nil)
       @source = source
       @recipe = recipe
@@ -43,7 +43,6 @@ module Extraction
       @page_number = page_number || recipe&.page_number
       @extractor_version = extractor_version || ENV.fetch("EXTRACTOR_VERSION", Recipe::EXTRACTOR_VERSION)
       @raw_section_header = raw_section_header || recipe&.raw_section_header
-      @historical = historical
       @recipe_number = recipe_number || recipe&.recipe_number
       @llm_response = llm_response
     end
@@ -76,10 +75,7 @@ module Extraction
     def extract_recipe
       return @llm_response if @llm_response.present?
 
-      Llm::ExtractRecipeFromText.call(
-        text: @text,
-        historical: @historical
-      )
+      Llm::ExtractRecipeFromText.call(text: @text)
     end
 
     # ---------------------------------------------------------------
