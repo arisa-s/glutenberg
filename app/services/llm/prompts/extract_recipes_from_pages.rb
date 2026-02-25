@@ -9,24 +9,6 @@ module Llm
     module ExtractRecipesFromPages
       SYSTEM_PROMPT = 'You are a helpful assistant that reads cookbook page images and returns JSON.'
 
-      INGREDIENT_GROUP_PARSED = <<~SCHEMA
-        {
-                    "purpose": "<group purpose or null>",
-                    "ingredients": [
-                        {
-                            "original_string": "<original text>",
-                            "product": "<ingredient name>",
-                            "quantity": <number or null>,
-                            "quantity_max": <number if range, otherwise null>,
-                            "unit": "<unit string or null>",
-                            "preparation": "<prep details or null>",
-                            "comment": "<notes or null>",
-                            "recipe_ref": {"ref_title": "...", "ref_number": ..., "ref_page": ..., "ref_raw_text": "..."} or null
-                        }
-                    ]
-                }
-      SCHEMA
-
       USER_PREAMBLE = <<~PROMPT.freeze
         You are reading page images from a historical cookbook. Extract every recipe
         visible on these pages into structured JSON.
@@ -44,7 +26,7 @@ module Llm
                 "printed_page": "<page number as printed in the book, or null>",
                 "raw_text": "<the complete original text of the recipe as printed on the page, preserving paragraph structure with newlines but normalizing archaic typography>",
                 "ingredient_groups": [
-                    #{INGREDIENT_GROUP_PARSED}
+                    #{Llm::Prompts::RecipeSchema::INGREDIENT_GROUP_SCHEMA}
                 ],
                 "instruction_groups": [
                     {
@@ -60,7 +42,7 @@ module Llm
                     "amount_max": <number if range, otherwise null>,
                     "unit": "<e.g., 'servings', or null>"
                 },
-                "category": "<one of: soup_stew, meat_fish_main, vegetable_side, bread_dough, dessert_baking, sweet_confection, sauce_gravy, preserve_pickle, beverage, breakfast_brunch, household_misc, other_unknown>",
+                "category": "<one of: #{Llm::Prompts::RecipeSchema::CATEGORY_LIST}>",
                 "lang": "<two-letter language code, e.g., 'en'>"
             }
         ]

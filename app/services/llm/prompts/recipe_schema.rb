@@ -33,6 +33,17 @@ module Llm
         }
       EXAMPLE
 
+      CATEGORY_LIST = Recipe::CATEGORIES.join(', ').freeze
+
+      INGREDIENT_GROUP_SCHEMA = <<~SCHEMA.freeze
+        {
+                    "purpose": "<group purpose or null>",
+                    "ingredients": [
+                        #{PARSED_INGREDIENT.strip.gsub("\n", "\n                        ")}
+                    ]
+                }
+      SCHEMA
+
       INGREDIENT_PARSING_RULES = <<~RULES.freeze
         **Ingredient Parsing Rules:**
         Parse each ingredient into this structure:

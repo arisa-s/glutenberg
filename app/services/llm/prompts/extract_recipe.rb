@@ -6,24 +6,6 @@
 module Llm
   module Prompts
     module ExtractRecipe
-      INGREDIENT_GROUP_PARSED = <<~SCHEMA
-        {
-                    "purpose": "<group purpose or null>",
-                    "ingredients": [
-                        {
-                            "original_string": "<original text>",
-                            "product": "<ingredient name>",
-                            "quantity": <number or null>,
-                            "quantity_max": <number if range, otherwise null>,
-                            "unit": "<unit string or null>",
-                            "preparation": "<prep details or null>",
-                            "comment": "<notes or null>",
-                            "recipe_ref": {"ref_title": "...", "ref_number": ..., "ref_page": ..., "ref_raw_text": "..."} or null
-                        }
-                    ]
-                }
-      SCHEMA
-
       CLEAN_HISTORICAL_OCR = <<~RULES
         - The input is OCR'd from old printed books. Clean the text before extracting:
           normalize archaic typography (e.g. long s "ſ" → "s"), rejoin words broken across
@@ -63,7 +45,7 @@ module Llm
         {
             "title": "<recipe title including recipe number if present>",
             "ingredient_groups": [
-                #{INGREDIENT_GROUP_PARSED}
+                #{Llm::Prompts::RecipeSchema::INGREDIENT_GROUP_SCHEMA}
             ],
             "instruction_groups": [
                 {
@@ -79,7 +61,7 @@ module Llm
                 "amount_max": <number if range, otherwise null>,
                 "unit": "<e.g., 'servings', or null>"
             },
-            "category": "<one of: soup_stew, meat_fish_main, vegetable_side, bread_dough, dessert_baking, sweet_confection, sauce_gravy, preserve_pickle, beverage, breakfast_brunch, household_misc, other_unknown>",
+            "category": "<one of: #{Llm::Prompts::RecipeSchema::CATEGORY_LIST}>",
             "lang": "<two-letter language code, e.g., 'en', 'ja'>"
         }
 
