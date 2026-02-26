@@ -74,12 +74,21 @@ module InternetArchive
 
     # OCR + segment: sends page images in batches to Gemini, which reads the
     # text and segments it by recipe. Cross-batch recipes are stitched together.
+    #
+    # Results are cached to disk after each batch. The cache persists until
+    # clear_segment_cache! is called explicitly (typically after extraction
+    # completes), so cancelling during selection won't lose OCR work.
     def ocr_and_segment(pages)
-      cache = SegmentCache.new(@source, @start_leaf, @end_leaf)
+      @segment_cache = SegmentCache.new(@source, @start_leaf, @end_leaf)
       batches = pages.each_slice(OCR_BATCH_SIZE).to_a
-      all_segments = cache.load
+      all_segments = @segment_cache.load
 
-      completed_count = all_segments.any? ? cache.completed_batches : 0
+      completed_count = all_segments.any? ? @segment_cache.completed_batches : 0
+      if completed_count >= batches.size && all_segments.any?
+        puts "  Using cached OCR results (#{all_segments.size} segments from #{completed_count} batches)"
+        return stitch_segments(all_segments)
+      end
+
       if completed_count > 0
         puts "  Resuming OCR+segment from batch #{completed_count + 1}/#{batches.size} " \
              "(#{all_segments.size} segments cached)"
@@ -100,14 +109,17 @@ module InternetArchive
         )
 
         all_segments.concat(batch_segments)
-        cache.save(all_segments, batch_idx + 1)
+        @segment_cache.save(all_segments, batch_idx + 1)
 
         sleep(0.5)
       end
 
-      result = stitch_segments(all_segments)
-      cache.clear
-      result
+      stitch_segments(all_segments)
+    end
+
+    # Clear the segment cache. Call after extraction completes successfully.
+    def clear_segment_cache!
+      @segment_cache&.clear
     end
 
     # Feed each segment's OCR text through the standard text extraction pipeline.

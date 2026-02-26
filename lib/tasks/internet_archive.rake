@@ -209,6 +209,9 @@ namespace :ia do
     )
     recipes = extraction_service.extract_recipes(selected)
 
+    # Clear OCR cache now that extraction is done
+    service.clear_segment_cache!
+
     # Resolve recipe cross-references
     puts "\nResolving recipe cross-references..."
     resolved = Extraction::ResolveRecipeReferencesService.call(source: source)

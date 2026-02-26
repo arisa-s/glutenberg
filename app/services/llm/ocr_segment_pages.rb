@@ -48,14 +48,13 @@ module Llm
       images_b64 = Llm::MultimodalContentBuilder.encode_images(@image_paths)
       user_content = Llm::MultimodalContentBuilder.build(
         images_b64: images_b64,
-        leaf_numbers: @leaf_numbers,
-        text_preamble: Llm::Prompts::OcrSegmentPages::SYSTEM_PROMPT
+        leaf_numbers: @leaf_numbers
       )
 
       max_tokens = [@image_paths.size * TOKENS_PER_PAGE, MIN_TOKENS].max
 
       result = @client.chat_completion(
-        system_prompt: 'You are a helpful assistant that reads cookbook page images and returns JSON.',
+        system_prompt: Llm::Prompts::OcrSegmentPages::SYSTEM_PROMPT,
         user_content: user_content,
         model: @model,
         temperature: @temperature,
