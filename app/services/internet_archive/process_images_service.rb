@@ -136,10 +136,11 @@ module InternetArchive
           extracted.each do |recipe_data|
             boundary = match_boundary(recipe_data, batch)
             start_leaf = boundary&.dig('start_leaf') || leaf_numbers.first
+            raw_text = recipe_data.delete('raw_text')
 
             recipe = Extraction::CreateRecipeService.call(
               source: @source,
-              text: recipe_data.to_json,
+              text: raw_text,
               input_type: 'image',
               page_number: start_leaf,
               raw_section_header: @section_header,
