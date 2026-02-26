@@ -16,15 +16,18 @@ OUTPUT_DIR=data/frozen/v1/release bundle exec rake datasets:export:v1
 
 ## Output artifacts
 
-| File | Description |
-|------|-------------|
-| `v1_recipes.csv` | One row per recipe: id, source, year, temporal slice, category, title, structural metrics |
-| `v1_recipe_ingredients_long.csv` | One row per (recipe, ingredient token) pair; join to recipes CSV for context |
-| `v1_manifest.json` | Selection rules, thresholds, counts, git SHA, tokenization rules |
+| File                             | Description                                                                                                           |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `v1_recipes.csv`                 | One row per recipe: id, source, year, slice, category, title, ingredient counts (raw + exported), instruction metrics |
+| `v1_recipe_ingredients_long.csv` | One row per (recipe, ingredient token) pair; join to recipes CSV for context                                          |
+| `v1_manifest.json`               | Selection rules, thresholds, counts, git SHA, tokenization rules                                                      |
 
 ### v1_recipes.csv columns
 
-`dataset_version`, `recipe_id`, `source_id`, `publication_year`, `slice`, `category`, `title`, `ingredient_count`, `instruction_step_count`, `instruction_char_count`
+`dataset_version`, `recipe_id`, `source_id`, `publication_year`, `slice`, `category`, `title`, `ingredient_count`, `ingredient_count_exported`, `instruction_step_count`, `instruction_char_count`
+
+- **ingredient_count**: Raw count of ingredient rows in the DB for this recipe (no filtering).
+- **ingredient_count_exported**: Count of rows actually exported for this recipe in `v1_recipe_ingredients_long.csv` (after excluding cross-refs, nil product, and deduplication by token). Use this when comparing to the long CSV.
 
 ### v1_recipe_ingredients_long.csv columns
 
@@ -45,27 +48,27 @@ df = ingredients.merge(recipes[["recipe_id", "source_id", "publication_year", "s
 
 All filtering logic lives in `scope.rb`. A recipe enters v1 if **all** of the following hold:
 
-| Rule | Default |
-|------|---------|
-| Source `included_in_corpus` | `true` |
-| `not_a_recipe` | `false` |
-| `extraction_status` | `'success'` |
-| `extraction_failed_count` | `<= 3` |
-| Title (`COALESCE(parsed_title, title)`) | non-blank |
-| Category | not `household_misc`, not `other_unknown` (NULL allowed) |
-| Ingredient count | `>= 3` |
-| Instruction step count | `>= 1` |
-| Instruction char count | `>= 80` and `<= 50,000` |
+| Rule                                    | Default                                                  |
+| --------------------------------------- | -------------------------------------------------------- |
+| Source `included_in_corpus`             | `true`                                                   |
+| `not_a_recipe`                          | `false`                                                  |
+| `extraction_status`                     | `'success'`                                              |
+| `extraction_failed_count`               | `<= 3`                                                   |
+| Title (`COALESCE(parsed_title, title)`) | non-blank                                                |
+| Category                                | not `household_misc`, not `other_unknown` (NULL allowed) |
+| Ingredient count                        | `>= 3`                                                   |
+| Instruction step count                  | `>= 1`                                                   |
+| Instruction char count                  | `>= 80` and `<= 50,000`                                  |
 
 After filtering, at most **200 recipes per source** are kept, selected in deterministic pseudo-random order using `md5(recipe_id \|\| seed)`. This spreads out similar titles (e.g. "beef soup 1", "beef soup 2") rather than taking the first 200 sequentially.
 
 ## Temporal slices
 
-| Slice | Year range |
-|-------|-----------|
-| `early` | 1740--1819 |
-| `victorian` | 1820--1869 |
-| `late` | 1870--1929 |
+| Slice          | Year range            |
+| -------------- | --------------------- |
+| `early`        | 1740--1819            |
+| `victorian`    | 1820--1869            |
+| `late`         | 1870--1929            |
 | `out_of_range` | anything else or NULL |
 
 ## Ingredient tokenization (Tokenizer)
@@ -73,7 +76,7 @@ After filtering, at most **200 recipes per source** are kept, selected in determ
 For each ingredient row:
 
 1. **Skip cross-references**: ingredients with `recipe_ref` or `referenced_recipe_id` set are excluded -- these are references to other recipes (e.g. "see No. 487"), not real ingredients.
-2. **Product only**: use the parsed `product` field. Ingredients with nil or blank `product` are excluded (no fallback to `original_string`).
+2. **Product only**: use the parsed `product` field. Ingredients with nil or blank `product` are excluded (99.9% of ingredient has product)
 3. Normalize: downcase, strip, replace non-Unicode-letter/number characters (except spaces and hyphens) with a space, collapse whitespace, trim.
 4. Drop blank results.
 
@@ -87,16 +90,16 @@ Tokens are deduplicated per recipe: each `(recipe_id, ingredient_token)` pair ap
 
 All thresholds are configurable at export time. Defaults shown below:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `OUTPUT_DIR` | `data/frozen/v1/<timestamp>` | Output directory |
-| `CAP` | `200` | Max recipes per source |
-| `SEED` | `42` | Deterministic sampling seed |
-| `MAX_FAILED` | `3` | Max `extraction_failed_count` |
-| `MIN_ING` | `3` | Min ingredients per recipe |
-| `MIN_INST_STEPS` | `1` | Min instruction steps |
-| `MIN_INST_CHARS` | `80` | Min total instruction characters |
-| `MAX_INST_CHARS` | `50000` | Max total instruction characters |
+| Variable         | Default                      | Description                      |
+| ---------------- | ---------------------------- | -------------------------------- |
+| `OUTPUT_DIR`     | `data/frozen/v1/<timestamp>` | Output directory                 |
+| `CAP`            | `200`                        | Max recipes per source           |
+| `SEED`           | `42`                         | Deterministic sampling seed      |
+| `MAX_FAILED`     | `3`                          | Max `extraction_failed_count`    |
+| `MIN_ING`        | `3`                          | Min ingredients per recipe       |
+| `MIN_INST_STEPS` | `1`                          | Min instruction steps            |
+| `MIN_INST_CHARS` | `80`                         | Min total instruction characters |
+| `MAX_INST_CHARS` | `50000`                      | Max total instruction characters |
 
 Example with overrides:
 
