@@ -61,12 +61,12 @@ rails "gutenberg:split[SOURCE_ID]"          # dry-run: preview chunks
 rails "gutenberg:process[SOURCE_ID]"        # split + extract via LLM
 ```
 
-### Internet Archive (page images, two-pass)
+### Internet Archive (page images)
 
-The primary IA pipeline downloads page images and uses a two-pass LLM approach:
+The IA pipeline downloads page images and uses Gemini to OCR + segment them by recipe, then feeds each recipe's text through the standard text extraction pipeline:
 
-1. **Pass 1 (Boundary Detection)**: Batches page images (~20 per batch) and asks Gemini to identify recipe titles and their page ranges. Cheap because output is compact.
-2. **Pass 2 (Targeted Extraction)**: Groups recipes into ~10-15 page batches using the boundary map, sends exactly the pages each recipe spans, and extracts full structured data. No truncation risk.
+1. **OCR + Segment**: Batches page images (~20 per batch) and asks Gemini 2.5 Flash to read the text and segment by recipe. Returns each recipe's title, page metadata, and full OCR'd text.
+2. **Text Extraction**: Each recipe's OCR'd text is fed through `ExtractRecipeFromText` (the same pipeline used for Gutenberg) for structured parsing with FDC enrichment.
 
 ```bash
 rails "ia:import[IDENTIFIER]"                          # import from IA metadata API
@@ -76,7 +76,7 @@ rails "ia:process_images[SOURCE_ID]"                   # full image pipeline
 rails "ia:process_images[SOURCE_ID,50,400]"            # scope to leaf range (skip preface/index)
 ```
 
-No per-book splitter strategy is needed -- Gemini handles layout detection and recipe boundary identification directly from the page images.
+No per-book splitter strategy is needed -- Gemini handles OCR and recipe segmentation directly from the page images.
 
 ### Extraction utilities
 
@@ -89,7 +89,7 @@ rails "extraction:resolve_all_refs"          # resolve refs for all sources
 
 Each Gutenberg book requires a custom splitter that understands its HTML structure. Strategies live in `app/services/gutenberg/splitters/` and use Nokogiri to parse HTML.
 
-The Internet Archive pipeline does not need splitters -- Gemini identifies recipe boundaries directly from page images.
+The Internet Archive pipeline does not need splitters -- Gemini handles OCR and segmentation directly from page images.
 
 A new strategy file is auto-generated when importing a Gutenberg source. To list registered strategies:
 
@@ -105,8 +105,7 @@ All LLM interaction lives under `app/services/llm/`:
 |---|---|
 | `ExtractRecipeFromText` | Text → structured recipe via LLM |
 | `SplitMultiRecipeText` | Split a text chunk containing multiple recipes |
-| `IdentifyRecipeBoundaries` | Pass 1: find recipe titles + leaf ranges from page images |
-| `ExtractRecipesFromPages` | Pass 2: full structured extraction from targeted page images |
+| `OcrSegmentPages` | OCR + segment: read page images and split by recipe (returns text) |
 | `FdcEnrichment` | Enrich ingredients with USDA foundation food data |
 | `OpenRouterClient` | HTTP client for the OpenRouter API |
 | `ResponseParser` | Robust JSON parser for LLM responses |

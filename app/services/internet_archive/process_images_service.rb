@@ -3,18 +3,19 @@
 require 'json'
 require 'fileutils'
 
-# Orchestrates the two-pass multimodal extraction pipeline for Internet Archive
-# books. Downloads page images, identifies recipe boundaries via LLM, then
-# extracts full structured recipes from targeted page ranges.
+# Orchestrates the image-based extraction pipeline for Internet Archive books.
+# Downloads page images, runs combined OCR + segmentation via LLM, then feeds
+# each recipe's text through the standard text extraction pipeline.
 #
-# Pass 1 (Boundary Detection):
-#   Batches page images (~20 per batch) and asks Gemini to return recipe titles
-#   and their leaf ranges. Results are cached to disk after each batch so a
-#   failure mid-way can be resumed without re-processing earlier batches.
+# The pipeline is:
+#   1. Fetch page images from IA's IIIF API
+#   2. OCR + segment: batch page images (~20/batch) → Gemini reads the text and
+#      segments by recipe → returns title, leaf range, and full OCR'd text
+#   3. Text extraction: feed each recipe's text through ExtractRecipeFromText
+#      for structured parsing (ingredients, instructions, etc.)
 #
-# Pass 2 (Targeted Extraction):
-#   Groups consecutive recipes into ~10-15 page batches using the boundary map,
-#   sends exactly the pages each recipe spans, and extracts full structured data.
+# Segment results are cached to disk after each batch so a failure mid-way
+# can be resumed without re-processing earlier batches.
 #
 # Usage:
 #   result = InternetArchive::ProcessImagesService.call(
@@ -22,13 +23,12 @@ require 'fileutils'
 #     start_leaf: 50,
 #     end_leaf: 400
 #   )
-#   # => { boundaries: [...], recipes: [...], summary: { success: N, ... } }
+#   # => { segments: [...], recipes: [...], summary: { success: N, ... } }
 #
 module InternetArchive
   class ProcessImagesService
-    BOUNDARY_BATCH_SIZE  = 20
-    EXTRACTION_MAX_PAGES = 12
-    CACHE_DIR = Rails.root.join('tmp', 'boundary_cache').freeze
+    OCR_BATCH_SIZE = 20
+    CACHE_DIR = Rails.root.join('tmp', 'segment_cache').freeze
 
     def self.call(...)
       new(...).call
@@ -44,19 +44,18 @@ module InternetArchive
       @section_header  = section_header
     end
 
-    # Returns { boundaries:, recipes:, summary: }
     def call
       pages = fetch_images
-      boundaries = detect_boundaries(pages)
-      return { boundaries: boundaries, recipes: [], summary: empty_summary } if boundaries.empty?
+      segments = ocr_and_segment(pages)
+      return { segments: segments, recipes: [], summary: empty_summary } if segments.empty?
 
-      boundaries = select_boundaries(boundaries)
-      return { boundaries: boundaries, recipes: [], summary: empty_summary } if boundaries.empty?
+      segments = select_segments(segments)
+      return { segments: segments, recipes: [], summary: empty_summary } if segments.empty?
 
-      recipes = extract_recipes(boundaries, pages)
+      recipes = extract_recipes(segments)
 
       {
-        boundaries: boundaries,
+        segments: segments,
         recipes: recipes,
         summary: build_summary(recipes)
       }
@@ -73,15 +72,17 @@ module InternetArchive
       )
     end
 
-    def detect_boundaries(pages)
-      cache = BoundaryCache.new(@source, @start_leaf, @end_leaf)
-      batches = pages.each_slice(BOUNDARY_BATCH_SIZE).to_a
-      all_boundaries = cache.load
+    # OCR + segment: sends page images in batches to Gemini, which reads the
+    # text and segments it by recipe. Cross-batch recipes are stitched together.
+    def ocr_and_segment(pages)
+      cache = SegmentCache.new(@source, @start_leaf, @end_leaf)
+      batches = pages.each_slice(OCR_BATCH_SIZE).to_a
+      all_segments = cache.load
 
-      completed_count = all_boundaries.any? ? cache.completed_batches : 0
+      completed_count = all_segments.any? ? cache.completed_batches : 0
       if completed_count > 0
-        puts "  Resuming Pass 1 from batch #{completed_count + 1}/#{batches.size} " \
-             "(#{all_boundaries.size} boundaries cached)"
+        puts "  Resuming OCR+segment from batch #{completed_count + 1}/#{batches.size} " \
+             "(#{all_segments.size} segments cached)"
       end
 
       batches.each_with_index do |batch, batch_idx|
@@ -90,78 +91,66 @@ module InternetArchive
         image_paths  = batch.map { |p| p[:path] }
         leaf_numbers = batch.map { |p| p[:leaf_number] }
 
-        puts "  Pass 1 batch #{batch_idx + 1}/#{batches.size}: " \
+        puts "  OCR batch #{batch_idx + 1}/#{batches.size}: " \
              "leaves #{leaf_numbers.first}–#{leaf_numbers.last}..."
 
-        batch_boundaries = Llm::IdentifyRecipeBoundaries.call(
+        batch_segments = Llm::OcrSegmentPages.call(
           image_paths: image_paths,
           leaf_numbers: leaf_numbers
         )
 
-        all_boundaries.concat(batch_boundaries)
-        cache.save(all_boundaries, batch_idx + 1)
+        all_segments.concat(batch_segments)
+        cache.save(all_segments, batch_idx + 1)
+
+        sleep(0.5)
       end
 
-      result = stitch_boundaries(all_boundaries)
+      result = stitch_segments(all_segments)
       cache.clear
       result
     end
 
-    def extract_recipes(boundaries, pages)
-      page_index = build_page_index(pages)
-      batches = group_into_extraction_batches(boundaries)
+    # Feed each segment's OCR text through the standard text extraction pipeline.
+    def extract_recipes(segments)
       recipes = []
       success = 0
       failed  = 0
 
-      batches.each_with_index do |batch, batch_idx|
-        batch_leaves = leaf_range_for_batch(batch, page_index)
-        image_paths  = batch_leaves.filter_map { |l| page_index[l]&.fetch(:path) }
-        leaf_numbers = batch_leaves.select { |l| page_index.key?(l) }
+      segments.each_with_index do |segment, idx|
+        title = segment['title'] || '(untitled)'
+        text  = segment['text']
+        progress = "[#{idx + 1}/#{segments.size}]"
 
-        next if image_paths.empty?
+        if text.blank?
+          puts "  #{progress} SKIP: #{title.truncate(55)} (no text)"
+          next
+        end
 
-        expected_titles = batch.map { |b| b['title'] }.compact
-        progress = "[#{batch_idx + 1}/#{batches.size}]"
-        puts "  #{progress} Pass 2: leaves #{leaf_numbers.first}–#{leaf_numbers.last} " \
-             "(#{expected_titles.size} recipe#{'s' if expected_titles.size != 1})..."
+        puts "  #{progress} Extracting: #{title.truncate(55)}..."
 
         begin
-          extracted = Llm::ExtractRecipesFromPages.call(
-            image_paths: image_paths,
-            leaf_numbers: leaf_numbers,
-            expected_recipes: expected_titles
+          recipe = Extraction::CreateRecipeService.call(
+            source: @source,
+            text: text,
+            input_type: 'image',
+            page_number: segment['start_leaf'],
+            raw_section_header: @section_header
           )
 
-          extracted.each do |recipe_data|
-            boundary = match_boundary(recipe_data, batch)
-            start_leaf = boundary&.dig('start_leaf') || leaf_numbers.first
-            raw_text = recipe_data.delete('raw_text')
-
-            recipe = Extraction::CreateRecipeService.call(
-              source: @source,
-              text: raw_text,
-              input_type: 'image',
-              page_number: start_leaf,
-              raw_section_header: @section_header,
-              llm_response: recipe_data
-            )
-
-            recipes << recipe
-            if recipe.extraction_status == 'success'
-              success += 1
-              puts "    OK: #{recipe.title&.truncate(60)}"
-            else
-              failed += 1
-              puts "    FAILED: #{recipe.error_message.to_s.truncate(80)}"
-            end
+          recipes << recipe
+          if recipe.extraction_status == 'success'
+            success += 1
+            puts "    OK: #{recipe.title&.truncate(60)}"
+          else
+            failed += 1
+            puts "    FAILED: #{recipe.error_message.to_s.truncate(80)}"
           end
         rescue StandardError => e
-          failed += batch.size
+          failed += 1
           puts "    ERROR: #{e.message.truncate(100)}"
         end
 
-        sleep(0.5)
+        sleep(0.3)
       end
 
       recipes
@@ -169,74 +158,49 @@ module InternetArchive
 
     private
 
-    def stitch_boundaries(boundaries)
-      boundaries.each_with_index do |b, i|
-        next if b['end_leaf'].present?
+    # When a recipe's text spans two OCR batches, the first batch returns the
+    # segment with end_leaf: null. Stitch it with the next segment if the next
+    # segment starts on an adjacent leaf and shares a similar title.
+    def stitch_segments(segments)
+      stitched = []
+      skip_next = false
 
-        if boundaries[i + 1]
-          b['end_leaf'] = boundaries[i + 1]['start_leaf']
-        end
-      end
-
-      boundaries.select { |b| b['start_leaf'].present? }
-    end
-
-    def select_boundaries(boundaries)
-      return boundaries unless @selected_indices
-
-      @selected_indices.filter_map { |i| boundaries[i] }
-    end
-
-    def build_page_index(pages)
-      pages.each_with_object({}) { |p, h| h[p[:leaf_number]] = p }
-    end
-
-    def group_into_extraction_batches(boundaries)
-      batches = []
-      current_batch = []
-      current_pages = 0
-
-      boundaries.each do |b|
-        start_l = b['start_leaf'].to_i
-        end_l   = (b['end_leaf'] || start_l).to_i
-        span    = [end_l - start_l + 1, 1].max
-
-        if current_batch.any? && (current_pages + span) > EXTRACTION_MAX_PAGES
-          batches << current_batch
-          current_batch = []
-          current_pages = 0
+      segments.each_with_index do |seg, i|
+        if skip_next
+          skip_next = false
+          next
         end
 
-        current_batch << b
-        current_pages += span
+        if seg['end_leaf'].nil? && segments[i + 1]
+          nxt = segments[i + 1]
+          if titles_match?(seg['title'], nxt['title'])
+            merged = seg.merge(
+              'end_leaf' => nxt['end_leaf'] || nxt['start_leaf'],
+              'text' => [seg['text'], nxt['text']].compact.join("\n")
+            )
+            stitched << merged
+            skip_next = true
+            next
+          else
+            seg = seg.merge('end_leaf' => seg['start_leaf'])
+          end
+        end
+
+        stitched << seg
       end
 
-      batches << current_batch if current_batch.any?
-      batches
+      stitched.select { |s| s['start_leaf'].present? }
     end
 
-    def leaf_range_for_batch(batch, page_index)
-      min_leaf = batch.map { |b| b['start_leaf'].to_i }.min
-      max_leaf = batch.map { |b| (b['end_leaf'] || b['start_leaf']).to_i }.max
-      (min_leaf..max_leaf).to_a.select { |l| page_index.key?(l) }
+    def titles_match?(a, b)
+      return false if a.blank? || b.blank?
+      a.to_s.downcase.strip == b.to_s.downcase.strip
     end
 
-    def match_boundary(recipe_data, batch)
-      title = recipe_data['title'].to_s.downcase.strip
-      return nil if title.blank?
+    def select_segments(segments)
+      return segments unless @selected_indices
 
-      batch.min_by do |b|
-        levenshtein_ish(b['title'].to_s.downcase.strip, title)
-      end
-    end
-
-    def levenshtein_ish(a, b)
-      return a.length if b.empty?
-      return b.length if a.empty?
-
-      (a.chars.tally.keys | b.chars.tally.keys).sum do |c|
-        (a.count(c) - b.count(c)).abs
-      end
+      @selected_indices.filter_map { |i| segments[i] }
     end
 
     def build_summary(recipes)
@@ -251,9 +215,9 @@ module InternetArchive
       { success: 0, failed: 0, total: 0 }
     end
 
-    # Persists Pass 1 boundary results to disk so detection can resume after
+    # Persists OCR+segment results to disk so processing can resume after
     # a failure without re-processing earlier batches.
-    class BoundaryCache
+    class SegmentCache
       def initialize(source, start_leaf, end_leaf)
         @path = CACHE_DIR.join("#{source.id}_#{start_leaf || 0}_#{end_leaf || 'end'}.json")
       end
@@ -262,7 +226,7 @@ module InternetArchive
         return [] unless @path.exist?
 
         data = JSON.parse(File.read(@path))
-        data['boundaries'] || []
+        data['segments'] || []
       rescue JSON::ParserError
         []
       end
@@ -276,12 +240,12 @@ module InternetArchive
         0
       end
 
-      def save(boundaries, completed_batches)
+      def save(segments, completed_batches)
         FileUtils.mkdir_p(CACHE_DIR)
         File.write(@path, JSON.pretty_generate(
           'completed_batches' => completed_batches,
           'saved_at' => Time.current.iso8601,
-          'boundaries' => boundaries
+          'segments' => segments
         ))
       end
 

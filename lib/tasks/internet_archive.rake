@@ -2,12 +2,12 @@
 
 # Rake tasks for the Internet Archive image-based extraction pipeline.
 #
-# The pipeline downloads page images from IA's IIIF API and uses a two-pass
-# LLM approach (boundary detection, then targeted extraction), bypassing IA's
-# OCR entirely.
+# The pipeline downloads page images from IA's IIIF API and uses Gemini to
+# OCR + segment the pages by recipe, then feeds each recipe's text through
+# the standard text extraction pipeline.
 #
-# Pass 1: Batch page images (~20/batch) → Gemini identifies recipe titles + leaf ranges
-# Pass 2: Send exact pages for each recipe → full structured extraction
+# OCR+Segment: Batch page images (~20/batch) → Gemini reads text & segments by recipe
+# Text Extraction: Each recipe's OCR'd text → ExtractRecipeFromText for structured parsing
 
 namespace :ia do
   desc 'Import an Internet Archive source by identifier. ' \
@@ -111,7 +111,7 @@ namespace :ia do
 
   # ---------------------------------------------------------------------------
 
-  desc 'Image-based pipeline: fetch page images → LLM boundary detection → LLM extraction. ' \
+  desc 'Image-based pipeline: fetch page images → OCR+segment → text extraction. ' \
        'No splitter strategy needed. Optional: start_leaf, end_leaf to scope to recipe pages.'
   task :process_images, [:source_id, :start_leaf, :end_leaf] => :environment do |_t, args|
     abort 'Usage: rails "ia:process_images[source_id]" or "ia:process_images[source_id,start_leaf,end_leaf]"' unless args[:source_id]
@@ -141,24 +141,25 @@ namespace :ia do
     pages = service.fetch_images
     puts "  #{pages.size} page images ready"
 
-    # Step 2: Boundary detection (Pass 1)
-    log_step 2, 3, 'Detecting recipe boundaries (Pass 1)...'
-    boundaries = service.detect_boundaries(pages)
-    puts "  Found #{boundaries.size} recipes"
+    # Step 2: OCR + segmentation
+    log_step 2, 3, 'OCR + segmentation (reading pages & splitting by recipe)...'
+    segments = service.ocr_and_segment(pages)
+    puts "  Found #{segments.size} recipes"
     puts
 
-    if boundaries.empty?
+    if segments.empty?
       puts "No recipes found. Try adjusting the leaf range."
       next
     end
 
-    # Display boundaries for selection
+    # Display segments for selection
     puts "  Detected recipes:"
     puts "  #{'-' * 56}"
-    boundaries.each_with_index do |b, idx|
-      title = (b['title'] || '(untitled)').truncate(55)
-      leaves = "leaves #{b['start_leaf']}–#{b['end_leaf'] || '?'}"
-      puts "    [#{(idx + 1).to_s.rjust(3)}] #{title}  (#{leaves})"
+    segments.each_with_index do |seg, idx|
+      title = (seg['title'] || '(untitled)').truncate(45)
+      leaves = "leaves #{seg['start_leaf']}–#{seg['end_leaf'] || '?'}"
+      text_preview = seg['text'].to_s.length
+      puts "    [#{(idx + 1).to_s.rjust(3)}] #{title}  (#{leaves}, #{text_preview} chars)"
     end
     puts "  #{'-' * 56}"
     puts
@@ -172,17 +173,17 @@ namespace :ia do
     abort "Cancelled." if input.blank?
 
     if input == 'all'
-      selected_indices = (0...boundaries.size).to_a
+      selected_indices = (0...segments.size).to_a
     else
-      selected_indices = parse_selection(input, boundaries.size)
+      selected_indices = parse_selection(input, segments.size)
       abort "No valid selections. Aborting." if selected_indices.empty?
     end
 
-    selected = selected_indices.map { |i| boundaries[i] }
+    selected = selected_indices.map { |i| segments[i] }
     puts
     puts "  Selected #{selected.size} recipe(s):"
-    selected.each_with_index do |b, i|
-      title = (b['title'] || '(untitled)').truncate(55)
+    selected.each_with_index do |seg, i|
+      title = (seg['title'] || '(untitled)').truncate(55)
       puts "    [#{(selected_indices[i] + 1).to_s.rjust(3)}] #{title}"
     end
 
@@ -194,10 +195,10 @@ namespace :ia do
     section_header = header_input.presence
 
     puts
-    confirm!("Send #{selected.size} recipe(s) to LLM for extraction (Pass 2)?")
+    confirm!("Extract #{selected.size} recipe(s) via text pipeline?")
 
-    # Step 3: Extract (Pass 2)
-    log_step 3, 3, "Extracting #{selected.size} recipes via LLM (Pass 2)..."
+    # Step 3: Text extraction
+    log_step 3, 3, "Extracting #{selected.size} recipes via text pipeline..."
 
     extraction_service = InternetArchive::ProcessImagesService.new(
       source: source,
@@ -206,7 +207,7 @@ namespace :ia do
       selected_indices: selected_indices,
       section_header: section_header
     )
-    recipes = extraction_service.extract_recipes(selected, pages)
+    recipes = extraction_service.extract_recipes(selected)
 
     # Resolve recipe cross-references
     puts "\nResolving recipe cross-references..."
@@ -221,7 +222,7 @@ namespace :ia do
     puts 'Summary'
     puts '=' * 60
     log_info 'Source',    "\"#{source.title}\""
-    log_info 'Boundaries', "#{boundaries.size} detected (Pass 1)"
+    log_info 'Segments',  "#{segments.size} OCR'd"
     log_info 'Selected',  selected.size
     log_info 'Success',   success_count
     log_info 'Failed',    failed_count
