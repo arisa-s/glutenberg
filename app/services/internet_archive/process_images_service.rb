@@ -1,12 +1,16 @@
 # frozen_string_literal: true
 
+require 'json'
+require 'fileutils'
+
 # Orchestrates the two-pass multimodal extraction pipeline for Internet Archive
 # books. Downloads page images, identifies recipe boundaries via LLM, then
 # extracts full structured recipes from targeted page ranges.
 #
 # Pass 1 (Boundary Detection):
 #   Batches page images (~20 per batch) and asks Gemini to return recipe titles
-#   and their leaf ranges. Cheap because output is tiny.
+#   and their leaf ranges. Results are cached to disk after each batch so a
+#   failure mid-way can be resumed without re-processing earlier batches.
 #
 # Pass 2 (Targeted Extraction):
 #   Groups consecutive recipes into ~10-15 page batches using the boundary map,
@@ -24,6 +28,7 @@ module InternetArchive
   class ProcessImagesService
     BOUNDARY_BATCH_SIZE  = 20
     EXTRACTION_MAX_PAGES = 12
+    CACHE_DIR = Rails.root.join('tmp', 'boundary_cache').freeze
 
     def self.call(...)
       new(...).call
@@ -69,13 +74,24 @@ module InternetArchive
     end
 
     def detect_boundaries(pages)
-      all_boundaries = []
+      cache = BoundaryCache.new(@source, @start_leaf, @end_leaf)
+      batches = pages.each_slice(BOUNDARY_BATCH_SIZE).to_a
+      all_boundaries = cache.load
 
-      pages.each_slice(BOUNDARY_BATCH_SIZE).with_index do |batch, batch_idx|
+      completed_count = all_boundaries.any? ? cache.completed_batches : 0
+      if completed_count > 0
+        puts "  Resuming Pass 1 from batch #{completed_count + 1}/#{batches.size} " \
+             "(#{all_boundaries.size} boundaries cached)"
+      end
+
+      batches.each_with_index do |batch, batch_idx|
+        next if batch_idx < completed_count
+
         image_paths  = batch.map { |p| p[:path] }
         leaf_numbers = batch.map { |p| p[:leaf_number] }
 
-        puts "  Pass 1 batch #{batch_idx + 1}: leaves #{leaf_numbers.first}–#{leaf_numbers.last}..."
+        puts "  Pass 1 batch #{batch_idx + 1}/#{batches.size}: " \
+             "leaves #{leaf_numbers.first}–#{leaf_numbers.last}..."
 
         batch_boundaries = Llm::IdentifyRecipeBoundaries.call(
           image_paths: image_paths,
@@ -83,9 +99,12 @@ module InternetArchive
         )
 
         all_boundaries.concat(batch_boundaries)
+        cache.save(all_boundaries, batch_idx + 1)
       end
 
-      stitch_boundaries(all_boundaries)
+      result = stitch_boundaries(all_boundaries)
+      cache.clear
+      result
     end
 
     def extract_recipes(boundaries, pages)
@@ -149,7 +168,6 @@ module InternetArchive
 
     private
 
-    # Resolve null end_leaf values by looking at the next boundary's start.
     def stitch_boundaries(boundaries)
       boundaries.each_with_index do |b, i|
         next if b['end_leaf'].present?
@@ -172,8 +190,6 @@ module InternetArchive
       pages.each_with_object({}) { |p, h| h[p[:leaf_number]] = p }
     end
 
-    # Group consecutive boundaries into extraction batches, keeping each batch
-    # under EXTRACTION_MAX_PAGES total pages.
     def group_into_extraction_batches(boundaries)
       batches = []
       current_batch = []
@@ -213,7 +229,6 @@ module InternetArchive
       end
     end
 
-    # Quick approximate string distance for title matching.
     def levenshtein_ish(a, b)
       return a.length if b.empty?
       return b.length if a.empty?
@@ -233,6 +248,45 @@ module InternetArchive
 
     def empty_summary
       { success: 0, failed: 0, total: 0 }
+    end
+
+    # Persists Pass 1 boundary results to disk so detection can resume after
+    # a failure without re-processing earlier batches.
+    class BoundaryCache
+      def initialize(source, start_leaf, end_leaf)
+        @path = CACHE_DIR.join("#{source.id}_#{start_leaf || 0}_#{end_leaf || 'end'}.json")
+      end
+
+      def load
+        return [] unless @path.exist?
+
+        data = JSON.parse(File.read(@path))
+        data['boundaries'] || []
+      rescue JSON::ParserError
+        []
+      end
+
+      def completed_batches
+        return 0 unless @path.exist?
+
+        data = JSON.parse(File.read(@path))
+        data['completed_batches'] || 0
+      rescue JSON::ParserError
+        0
+      end
+
+      def save(boundaries, completed_batches)
+        FileUtils.mkdir_p(CACHE_DIR)
+        File.write(@path, JSON.pretty_generate(
+          'completed_batches' => completed_batches,
+          'saved_at' => Time.current.iso8601,
+          'boundaries' => boundaries
+        ))
+      end
+
+      def clear
+        File.delete(@path) if @path.exist?
+      end
     end
   end
 end
