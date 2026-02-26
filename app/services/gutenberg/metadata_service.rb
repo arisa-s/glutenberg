@@ -20,7 +20,7 @@ require 'json'
 module Gutenberg
   class MetadataService
     GUTENDEX_API = 'https://gutendex.com/books'
-    USER_AGENT = 'ProjectGlutenberg/1.0 (research thesis)'
+    USER_AGENT = 'Glutenber/1.0 (research project)'
 
     # Regex to extract a Gutenberg book ID from various URL formats:
     #   /files/22114/...  /ebooks/22114  /cache/epub/10136/...

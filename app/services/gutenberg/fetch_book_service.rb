@@ -17,7 +17,7 @@ require 'fileutils'
 module Gutenberg
   class FetchBookService
     CACHE_DIR = Rails.root.join('data', 'gutenberg').freeze
-    USER_AGENT = 'ProjectGlutenberg/1.0 (research thesis; contact: project-glutenberg@example.com)'
+    USER_AGENT = 'Glutenber/1.0 (research project; contact: glutenberg@example.com)'
     REQUEST_DELAY = 2 # seconds between requests (Gutenberg policy)
 
     class FetchError < StandardError; end

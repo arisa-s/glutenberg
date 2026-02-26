@@ -24,7 +24,7 @@ require 'json'
 module InternetArchive
   class FetchPageImagesService
     CACHE_DIR  = Rails.root.join('data', 'internet_archive').freeze
-    USER_AGENT = 'ProjectGlutenberg/1.0 (research thesis; contact: project-glutenberg@example.com)'
+    USER_AGENT = 'Glutenber/1.0 (research project; contact: glutenberg@example.com)'
     REQUEST_DELAY = 0.5 # seconds between requests (be polite to IA)
     DOWNLOAD_THREADS = 6 # concurrent downloads
     MAX_REDIRECTS = 5

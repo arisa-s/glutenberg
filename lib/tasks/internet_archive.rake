@@ -274,7 +274,7 @@ def fetch_ia_metadata(identifier)
   http.read_timeout = 30
 
   request = Net::HTTP::Get.new(uri)
-  request['User-Agent'] = 'ProjectGlutenberg/1.0 (research thesis; contact: project-glutenberg@example.com)'
+  request['User-Agent'] = 'Glutenber/1.0 (research project; contact: glutenberg@example.com)'
 
   response = http.request(request)
   raise "IA API returned HTTP #{response.code}" unless response.is_a?(Net::HTTPSuccess)
