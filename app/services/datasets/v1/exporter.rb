@@ -48,6 +48,7 @@ module Datasets
           recipes_per_slice:     ingredient_stats[:recipes_per_slice],
           recipes_per_source:    ingredient_stats[:recipes_per_source],
           slice_statistics:      compute_slice_statistics(metrics),
+          source_statistics:     compute_source_statistics(metrics, ing_result[:vocab_per_source]),
           pre_cap_per_source:    scope.pre_cap_counts_per_source
         )
 
@@ -116,8 +117,11 @@ module Datasets
       # v1_recipe_ingredients_long.csv
       # ------------------------------------------------------------------
       def write_ingredients_csv(ids)
-        total_rows = 0
-        vocab      = Set.new
+        total_rows       = 0
+        vocab            = Set.new
+        vocab_per_source = Hash.new { |h, k| h[k] = Set.new }
+        recipe_source    = scope.recipe_metrics.each_with_object({}) { |(rid, row), h| h[rid] = row["source_id"] }
+        seen_pairs       = Set.new
 
         path = File.join(output_dir, "v1_recipe_ingredients_long.csv")
         CSV.open(path, "w", write_headers: true, headers: INGREDIENT_CSV_HEADERS) do |csv|
@@ -135,7 +139,12 @@ module Datasets
               )
               next if token.nil?
 
+              pair = [ing.recipe_id, token]
+              next if seen_pairs.include?(pair)
+
+              seen_pairs << pair
               vocab << token
+              vocab_per_source[recipe_source[ing.recipe_id]] << token
               total_rows += 1
 
               csv << [DATASET_VERSION, ing.recipe_id, token]
@@ -143,7 +152,7 @@ module Datasets
           end
         end
 
-        { total_rows: total_rows, vocab_size: vocab.size }
+        { total_rows: total_rows, vocab_size: vocab.size, vocab_per_source: vocab_per_source }
       end
 
       def compute_slice_statistics(metrics)
@@ -165,10 +174,30 @@ module Datasets
         end
       end
 
+      def compute_source_statistics(metrics, vocab_per_source)
+        by_source = Hash.new { |h, k| h[k] = { ingredient_counts: [], instruction_char_counts: [] } }
+
+        metrics.each_value do |row|
+          sid = row["source_id"]
+          by_source[sid][:ingredient_counts]      << row["ingredient_count"].to_f
+          by_source[sid][:instruction_char_counts] << row["instruction_char_count"].to_f
+        end
+
+        by_source.each_with_object({}) do |(sid, data), result|
+          n = data[:ingredient_counts].size
+          result[sid] = {
+            recipe_count:               n,
+            avg_ingredient_count:       (data[:ingredient_counts].sum / n).round(2),
+            avg_instruction_char_count: (data[:instruction_char_counts].sum / n).round(2),
+            vocab_size:                 vocab_per_source[sid]&.size || 0
+          }
+        end
+      end
+
       # ------------------------------------------------------------------
       # v1_manifest.json
       # ------------------------------------------------------------------
-      def write_manifest(metrics:, total_ing_rows:, vocab_size:, recipes_per_slice:, recipes_per_source:, slice_statistics:, pre_cap_per_source:)
+      def write_manifest(metrics:, total_ing_rows:, vocab_size:, recipes_per_slice:, recipes_per_source:, slice_statistics:, source_statistics:, pre_cap_per_source:)
         git_sha = begin
           `git rev-parse HEAD 2>/dev/null`.strip.presence
         rescue StandardError
@@ -189,12 +218,13 @@ module Datasets
             vocab_size:                     vocab_size
           },
           slice_statistics:      slice_statistics,
+          source_statistics:     source_statistics,
           tokenization_rules: {
             source_field:  "product (fallback: original_string)",
             normalization: "downcase -> strip -> replace non-Unicode-letter/number (except space/hyphen) with space -> collapse whitespace -> trim",
             blank_handling: "blank tokens are dropped",
             cross_ref_filtering: "ingredients with recipe_ref or referenced_recipe_id are excluded (cross-references to other recipes, not real ingredients)",
-            deduplication: "tokens are NOT deduplicated per recipe; the same token may appear multiple times for a recipe if it was listed in multiple ingredient groups or repeated. Deduplicate in analysis with (recipe_id, ingredient_token) if needed."
+            deduplication: "tokens are deduplicated per recipe; each (recipe_id, ingredient_token) pair appears at most once"
           }
         }
 
