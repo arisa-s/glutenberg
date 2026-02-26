@@ -78,11 +78,7 @@ Unicode-aware (`\p{L}`, `\p{N}`) so accented characters (e.g. "cafe", "creme") a
 
 ### Deduplication
 
-Tokens are **not** deduplicated per recipe in the export. The same token may appear multiple times for a recipe if it was listed in multiple ingredient groups or repeated in the original text. For bag-of-words or document-term matrix analysis, deduplicate in Python with:
-
-```python
-df.drop_duplicates(subset=["recipe_id", "ingredient_token"])
-```
+Tokens are deduplicated per recipe: each `(recipe_id, ingredient_token)` pair appears at most once. If the same ingredient was listed multiple times in the original text (e.g. across ingredient groups), only one row is exported.
 
 ## ENV overrides
 
