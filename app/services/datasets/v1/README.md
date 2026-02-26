@@ -1,6 +1,6 @@
 # Dataset v1 Exporter
 
-Reproducible, versioned export of the diachronic British cookbooks corpus for thesis analysis. Produces frozen CSV artifacts that Python consumes downstream.
+Reproducible, versioned export of the diachronic British cookbooks corpus for the project analysis. Produces frozen CSV artifacts that Python consumes downstream.
 
 ## Quick start
 
