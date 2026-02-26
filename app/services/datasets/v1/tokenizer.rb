@@ -3,14 +3,13 @@
 module Datasets
   module V1
     class Tokenizer
-      # Tokenize a single ingredient record.
-      # Returns the normalized token string, or nil if the result is blank.
-      #
-      #   product:         the parsed product name (may be nil/blank)
-      #   original_string: the raw ingredient text (fallback)
-      def self.call(product:, original_string:)
-        raw = product.present? ? product : original_string
-        normalize(raw)
+      # Tokenize a single ingredient record using only the parsed product.
+      # Returns the normalized token string, or nil if product is nil/blank.
+      # Ingredients with nil product are excluded (no fallback to original_string).
+      def self.call(product:)
+        return nil unless product.present?
+
+        normalize(product)
       end
 
       # Normalize an arbitrary string into a canonical token.
