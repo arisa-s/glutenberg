@@ -28,7 +28,10 @@ OUTPUT_DIR=data/frozen/v1/release bundle exec rake datasets:export:v1
 
 ### v1_recipe_ingredients_long.csv columns
 
-`dataset_version`, `recipe_id`, `ingredient_token`
+`dataset_version`, `recipe_id`, `ingredient_token`, `foundation_food_id`, `foundation_food_name`, `foundation_food_category`
+
+- **ingredient_token**: Normalized product name (see Ingredient tokenization below).
+- **FDC columns**: USDA Food Data Central enrichment; blank when the ingredient had no FDC match. Useful for diachronic analysis by standardized category or concept.
 
 Join to `v1_recipes.csv` on `recipe_id` to get source, year, slice, and category context:
 
@@ -70,7 +73,7 @@ After filtering, at most **200 recipes per source** are kept, selected in determ
 For each ingredient row:
 
 1. **Skip cross-references**: ingredients with `recipe_ref` or `referenced_recipe_id` set are excluded -- these are references to other recipes (e.g. "see No. 487"), not real ingredients.
-2. Use `product` if present, otherwise fall back to `original_string`.
+2. **Product only**: use the parsed `product` field. Ingredients with nil or blank `product` are excluded (no fallback to `original_string`).
 3. Normalize: downcase, strip, replace non-Unicode-letter/number characters (except spaces and hyphens) with a space, collapse whitespace, trim.
 4. Drop blank results.
 
@@ -120,7 +123,7 @@ lib/tasks/
 
 spec/services/datasets/v1/
   scope_spec.rb     -- selection rules, per-source cap, seed reproducibility
-  tokenizer_spec.rb -- normalization, unicode, fallback, blank handling
+  tokenizer_spec.rb -- normalization, unicode, product-only, blank handling
   exporter_spec.rb  -- temporal slice assignment
 ```
 

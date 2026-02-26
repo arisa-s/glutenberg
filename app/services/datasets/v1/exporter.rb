@@ -22,6 +22,7 @@ module Datasets
 
       INGREDIENT_CSV_HEADERS = %w[
         dataset_version recipe_id ingredient_token
+        foundation_food_id foundation_food_name foundation_food_category
       ].freeze
 
       INGREDIENT_BATCH_SIZE = 500
@@ -130,13 +131,10 @@ module Datasets
               .joins(ingredient_group: :recipe)
               .where(ingredient_groups: { recipe_id: batch_ids })
               .where(recipe_ref: nil, referenced_recipe_id: nil)
-              .select(:id, :product, :original_string, "ingredient_groups.recipe_id AS recipe_id")
+              .select(:id, :product, :foundation_food_id, :foundation_food_name, :foundation_food_category, "ingredient_groups.recipe_id AS recipe_id")
 
             ingredients.each do |ing|
-              token = Tokenizer.call(
-                product: ing.product,
-                original_string: ing.original_string
-              )
+              token = Tokenizer.call(product: ing.product)
               next if token.nil?
 
               pair = [ing.recipe_id, token]
@@ -147,7 +145,14 @@ module Datasets
               vocab_per_source[recipe_source[ing.recipe_id]] << token
               total_rows += 1
 
-              csv << [DATASET_VERSION, ing.recipe_id, token]
+              csv << [
+                DATASET_VERSION,
+                ing.recipe_id,
+                token,
+                ing.foundation_food_id,
+                ing.foundation_food_name.presence,
+                ing.foundation_food_category.presence
+              ]
             end
           end
         end
@@ -220,11 +225,12 @@ module Datasets
           slice_statistics:      slice_statistics,
           source_statistics:     source_statistics,
           tokenization_rules: {
-            source_field:  "product (fallback: original_string)",
+            source_field:  "product only; ingredients with nil/blank product are excluded",
             normalization: "downcase -> strip -> replace non-Unicode-letter/number (except space/hyphen) with space -> collapse whitespace -> trim",
             blank_handling: "blank tokens are dropped",
             cross_ref_filtering: "ingredients with recipe_ref or referenced_recipe_id are excluded (cross-references to other recipes, not real ingredients)",
-            deduplication: "tokens are deduplicated per recipe; each (recipe_id, ingredient_token) pair appears at most once"
+            deduplication: "tokens are deduplicated per recipe; each (recipe_id, ingredient_token) pair appears at most once",
+            fdc_columns: "foundation_food_id, foundation_food_name, foundation_food_category (USDA FDC); blank when ingredient had no FDC match"
           }
         }
 
