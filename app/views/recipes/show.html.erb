@@ -90,7 +90,7 @@
     <ul class="ingredient-list">
         <% group.ingredients.order(:order).each do |ingredient| %>
         <li>
-            <%= highlight_product(ingredient.original_string, ingredient.product) %>
+            <%= highlight_product(ingredient.original_string, ingredient.product, link: true) %>
             <% if ingredient.foundation_food_name.present? %>
             <span class="foundation-food">
                 ↝ <%= ingredient.foundation_food_name %>
