@@ -53,19 +53,25 @@
                 <% if @recipe.extracted_at.present? %>
                 · extracted <%= time_ago_in_words(@recipe.extracted_at) %> ago
                 <% end %>
-                <% if @recipe.extraction_status == 'failed' && @recipe.input_text.present? %>
-                <%= button_to "Retry extraction", retry_extraction_source_recipe_path(@source, @recipe), method: :post, class: "btn btn-small" %>
-                <% end %>
-                <% if @recipe.input_text.present? %>
-                <%= button_to "Split & re-extract", split_and_reextract_source_recipe_path(@source, @recipe), method: :post, class: "btn btn-small", data: { confirm: "This will split the input text into separate recipes and mark this one as not-a-recipe. Continue?" } %>
+                <% unless readonly_mode? %>
+                  <% if @recipe.extraction_status == 'failed' && @recipe.input_text.present? %>
+                  <%= button_to "Retry extraction", retry_extraction_source_recipe_path(@source, @recipe), method: :post, class: "btn btn-small" %>
+                  <% end %>
+                  <% if @recipe.input_text.present? %>
+                  <%= button_to "Split & re-extract", split_and_reextract_source_recipe_path(@source, @recipe), method: :post, class: "btn btn-small", data: { confirm: "This will split the input text into separate recipes and mark this one as not-a-recipe. Continue?" } %>
+                  <% end %>
                 <% end %>
             </dd>
 
             <dt>Not a recipe</dt>
             <dd>
-                <%= form_with model: [@source, @recipe], url: source_recipe_path(@source, @recipe), method: :patch, local: true do |f| %>
-                <%= f.check_box :not_a_recipe, { onchange: "this.form.submit()" }, true, false %>
-                <%= f.label :not_a_recipe, "Mark as not a recipe" %>
+                <% if readonly_mode? %>
+                  <%= @recipe.not_a_recipe ? "Yes" : "No" %>
+                <% else %>
+                  <%= form_with model: [@source, @recipe], url: source_recipe_path(@source, @recipe), method: :patch, local: true do |f| %>
+                  <%= f.check_box :not_a_recipe, { onchange: "this.form.submit()" }, true, false %>
+                  <%= f.label :not_a_recipe, "Mark as not a recipe" %>
+                  <% end %>
                 <% end %>
             </dd>
         </dl>
@@ -134,19 +140,27 @@
         <% end %>
     </div>
     <div class="window-pane">
-        <%= form_with model: [@source, @recipe], url: source_recipe_path(@source, @recipe), method: :patch, local: true do |f| %>
-        <%= f.text_area :input_text, class: "original-text-input", rows: 12, placeholder: "Paste or edit the original recipe text here…" %>
-        <%= f.submit "Save original text", class: "btn btn-small" %>
+        <% if readonly_mode? %>
+          <div class="original-text-input" style="white-space: pre-wrap;"><%= @recipe.input_text.presence || "—" %></div>
+        <% else %>
+          <%= form_with model: [@source, @recipe], url: source_recipe_path(@source, @recipe), method: :patch, local: true do |f| %>
+          <%= f.text_area :input_text, class: "original-text-input", rows: 12, placeholder: "Paste or edit the original recipe text here…" %>
+          <%= f.submit "Save original text", class: "btn btn-small" %>
+          <% end %>
         <% end %>
     </div>
 
-    <%# Notes section (editable) %>
+    <%# Notes section %>
     <div class="separator"></div>
     <div class="section-header">Notes</div>
     <div class="window-pane">
-        <%= form_with model: [@source, @recipe], url: source_recipe_path(@source, @recipe), method: :patch, local: true do |f| %>
-        <%= f.text_area :notes, class: "original-text-input notes-input", rows: 6, placeholder: "Add notes about this recipe…" %>
-        <%= f.submit "Save notes", class: "btn btn-small" %>
+        <% if readonly_mode? %>
+          <div class="original-text-input notes-input" style="white-space: pre-wrap;"><%= @recipe.notes.presence || "—" %></div>
+        <% else %>
+          <%= form_with model: [@source, @recipe], url: source_recipe_path(@source, @recipe), method: :patch, local: true do |f| %>
+          <%= f.text_area :notes, class: "original-text-input notes-input", rows: 6, placeholder: "Add notes about this recipe…" %>
+          <%= f.submit "Save notes", class: "btn btn-small" %>
+          <% end %>
         <% end %>
     </div>
 </div>

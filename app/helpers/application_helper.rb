@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
 module ApplicationHelper
+  def readonly_mode?
+    Rails.env.production?
+  end
+
   def highlight_product(original_string, product)
     return original_string if original_string.blank? || product.blank?
 
