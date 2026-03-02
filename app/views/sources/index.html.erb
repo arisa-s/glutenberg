@@ -19,6 +19,7 @@
 
   <div class="window-pane">
     <% if @sources.any? %>
+      <div class="table-wrapper">
       <table>
         <thead>
           <tr>
@@ -64,6 +65,7 @@
           <% end %>
         </tbody>
       </table>
+      </div>
     <% else %>
       <div class="empty-state">
         No sources found.

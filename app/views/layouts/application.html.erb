@@ -207,6 +207,82 @@
       gap: 0.5rem;
       font-size: 0.9rem;
     }
+
+    /* Table scroll on small screens */
+    .table-wrapper {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      margin: 0 -0.75rem;
+      padding: 0 0.75rem;
+    }
+    .table-wrapper table { min-width: 600px; }
+
+    .filter-form {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .filter-form input[type="text"] { flex: 1; min-width: 150px; }
+    .filter-form select { max-width: 220px; }
+
+    /* Responsive: small screens */
+    @media (max-width: 768px) {
+      .desktop {
+        padding: 0.75rem;
+      }
+      .meta-grid {
+        grid-template-columns: 1fr;
+      }
+      .book-cover-lg {
+        float: none;
+        display: block;
+        max-width: 100%;
+        margin: 0 0 12px 0;
+      }
+      .details-bar {
+        font-size: 0.75rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2px 6px;
+      }
+      table {
+        font-size: 0.8rem;
+      }
+      th, td {
+        padding: 4px 6px;
+      }
+      .section-header { font-size: 0.85rem; }
+      .ingredient-list li, .instruction-list li { font-size: 0.8rem; }
+      .menu-stats {
+        float: none;
+        display: block;
+        margin-top: 2px;
+      }
+    }
+
+    /* Responsive: very small screens */
+    @media (max-width: 480px) {
+      .desktop {
+        padding: 0.5rem;
+      }
+      .window-pane {
+        padding: 0.5rem;
+      }
+      .table-wrapper {
+        margin: 0 -0.5rem;
+        padding: 0 0.5rem;
+      }
+      .table-wrapper table { min-width: 500px; }
+      .filter-form input[type="text"] { min-width: 0; }
+      .filter-form select { max-width: 100%; }
+      .title-bar .title {
+        font-size: 0.9rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
   </style>
 </head>
 <body>
@@ -225,7 +301,7 @@
       <%= link_to "Ingredients", ingredients_path %>
     </li>
     <li role="menu-item" tabindex="0" aria-haspopup="false">
-      <span style="float: right; font-size: 0.8rem;">
+      <span class="menu-stats" style="float: right; font-size: 0.8rem;">
         <% menu_counts = Rails.cache.fetch("layout_menu_counts", expires_in: 1.minute) { { sources: Source.count, recipes: Recipe.successful.count } } %>
         <%= menu_counts[:sources] %> sources · <%= menu_counts[:recipes] %> recipes
       </span>

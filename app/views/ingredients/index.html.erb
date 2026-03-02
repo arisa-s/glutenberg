@@ -23,7 +23,7 @@
 
   <%# Search & filter bar %>
   <div class="window-pane" style="padding-bottom: 0;">
-    <%= form_tag ingredients_path, method: :get, style: "display: flex; gap: 8px; align-items: center; flex-wrap: wrap;" do %>
+    <%= form_tag ingredients_path, method: :get, class: "filter-form" do %>
       <input type="text" name="search" value="<%= params[:search] %>"
              placeholder="Search product name…" style="flex: 1; min-width: 150px;">
       <select name="category" style="max-width: 220px;">
@@ -43,6 +43,7 @@
 
   <div class="window-pane">
     <% if @ingredients.any? %>
+      <div class="table-wrapper">
       <table>
         <thead>
           <tr>
@@ -96,6 +97,7 @@
           <% end %>
         </tbody>
       </table>
+      </div>
       <% if @total_pages > 1 %>
         <p class="pagination-links" style="margin-top: 0.75rem;">
           <% if @page > 1 %>

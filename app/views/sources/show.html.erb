@@ -118,6 +118,7 @@
 
   <div class="window-pane">
     <% if @recipes.any? %>
+      <div class="table-wrapper">
       <table>
         <thead>
           <tr>
@@ -153,6 +154,7 @@
           <% end %>
         </tbody>
       </table>
+      </div>
       <% if @recipes_total_pages > 1 %>
         <p class="pagination-links">
           <% if @recipes_page > 1 %>
