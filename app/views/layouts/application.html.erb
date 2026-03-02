@@ -6,6 +6,8 @@
   <title><%= content_for?(:title) ? "#{yield(:title)} — " : "" %>Project Glutenberg</title>
   <link rel="stylesheet" href="https://unpkg.com/@sakun/system.css">
   <style>
+    /* Override system.css: single page scroll, no scrollbars on panes unless needed */
+    html { overflow-x: hidden; }
     body {
       background: #ddd url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="1" height="1" fill="%23ccc"/></svg>') repeat;
       padding: 0;
@@ -21,8 +23,20 @@
       margin: 0 auto;
     }
 
-    .window { width: 100%; }
-    .window-pane { padding: 0.75rem; }
+    /* Window grows with content; only the document scrolls */
+    .window {
+      width: 100%;
+      overflow: visible;
+      display: block;
+    }
+    /* Panes flow naturally; scrollbar only when content overflows (override system.css height:100%; overflow-y:scroll) */
+    .window-pane {
+      padding: 0.75rem;
+      height: auto;
+      min-height: 0;
+      overflow-y: visible;
+      overflow-x: hidden;
+    }
 
     /* Details bar styling */
     .details-bar {
