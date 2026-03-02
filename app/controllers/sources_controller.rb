@@ -38,11 +38,13 @@ class SourcesController < ApplicationController
     return if @recipes.empty?
 
     recipe_ids = @recipes.map(&:id)
-    @ingredient_counts = Ingredient.joins(ingredient_group: :recipe)
+    @ingredient_counts = Ingredient.unscoped
+      .joins(ingredient_group: :recipe)
       .where(ingredient_groups: { recipe_id: recipe_ids })
       .group("ingredient_groups.recipe_id")
       .count
-    @instruction_counts = Instruction.joins(instruction_group: :recipe)
+    @instruction_counts = Instruction.unscoped
+      .joins(instruction_group: :recipe)
       .where(instruction_groups: { recipe_id: recipe_ids })
       .group("instruction_groups.recipe_id")
       .count
@@ -59,8 +61,8 @@ class SourcesController < ApplicationController
       @recipes = @source.recipes.order(:title).limit(PER_PAGE).to_a
       @failed_with_text_count = @source.recipes.unscoped.where(extraction_status: "failed").where.not(input_text: [nil, ""]).count
       recipe_ids = @recipes.map(&:id)
-      @ingredient_counts = recipe_ids.any? ? Ingredient.joins(ingredient_group: :recipe).where(ingredient_groups: { recipe_id: recipe_ids }).group("ingredient_groups.recipe_id").count : {}
-      @instruction_counts = recipe_ids.any? ? Instruction.joins(instruction_group: :recipe).where(instruction_groups: { recipe_id: recipe_ids }).group("instruction_groups.recipe_id").count : {}
+      @ingredient_counts = recipe_ids.any? ? Ingredient.unscoped.joins(ingredient_group: :recipe).where(ingredient_groups: { recipe_id: recipe_ids }).group("ingredient_groups.recipe_id").count : {}
+      @instruction_counts = recipe_ids.any? ? Instruction.unscoped.joins(instruction_group: :recipe).where(instruction_groups: { recipe_id: recipe_ids }).group("instruction_groups.recipe_id").count : {}
       render :show, status: :unprocessable_entity
     end
   end
