@@ -190,6 +190,14 @@
       background: #eee;
       border-bottom: 1px solid #999;
     }
+
+    .pagination-links {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      font-size: 0.9rem;
+    }
   </style>
 </head>
 <body>
@@ -209,7 +217,8 @@
     </li>
     <li role="menu-item" tabindex="0" aria-haspopup="false">
       <span style="float: right; font-size: 0.8rem;">
-        <%= Source.count %> sources · <%= Recipe.successful.count %> recipes
+        <% menu_counts = Rails.cache.fetch("layout_menu_counts", expires_in: 1.minute) { { sources: Source.count, recipes: Recipe.successful.count } } %>
+        <%= menu_counts[:sources] %> sources · <%= menu_counts[:recipes] %> recipes
       </span>
     </li>
   </ul>

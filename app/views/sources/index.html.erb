@@ -47,7 +47,7 @@
               <td><%= source.publication_year || "—" %></td>
               <td><%= source.region_country || "—" %></td>
               <td><%= source.provider %></td>
-              <td><%= source.recipes.count %></td>
+              <td><%= @recipe_counts[source.id].to_i %></td>
               <td>
                 <% if failed_count == 0 %>
                   <span class="badge badge-success" title="No failed extractions (or all failed marked not a recipe)">✓</span>

@@ -13,6 +13,10 @@
     <span><strong><%= @unique_products %></strong> unique products</span>
     <span>·</span>
     <span><strong><%= @categories.size %></strong> FDC categories</span>
+    <% if @total_pages > 1 %>
+      <span>·</span>
+      <span>page <%= @page %> of <%= @total_pages %></span>
+    <% end %>
   </div>
 
   <div class="separator"></div>
@@ -92,6 +96,17 @@
           <% end %>
         </tbody>
       </table>
+      <% if @total_pages > 1 %>
+        <p class="pagination-links" style="margin-top: 0.75rem;">
+          <% if @page > 1 %>
+            <%= link_to "← Previous", ingredients_path(page: @page - 1, search: params[:search], category: params[:category]), class: "btn btn-small" %>
+          <% end %>
+          <span style="margin: 0 0.5rem;">Page <%= @page %> of <%= @total_pages %></span>
+          <% if @page < @total_pages %>
+            <%= link_to "Next →", ingredients_path(page: @page + 1, search: params[:search], category: params[:category]), class: "btn btn-small" %>
+          <% end %>
+        </p>
+      <% end %>
     <% else %>
       <div class="empty-state">
         No ingredients found.<br>

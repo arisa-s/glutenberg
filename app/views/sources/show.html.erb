@@ -14,7 +14,7 @@
     <span>·</span>
     <span><%= @source.region_country || "Unknown origin" %></span>
     <span>·</span>
-    <span><%= @recipes.count %> recipes</span>
+    <span><%= @recipes_total %> recipes</span>
   </div>
 
   <div class="separator"></div>
@@ -97,17 +97,21 @@
 
   <%# Recipes section %>
   <div class="separator"></div>
-  <div class="section-header">Recipes (<%= @recipes.count %>)</div>
+  <div class="section-header">
+    Recipes (<%= @recipes_total %>)
+    <% if @recipes_total_pages > 1 %>
+      <span class="muted">· page <%= @recipes_page %> of <%= @recipes_total_pages %></span>
+    <% end %>
+  </div>
 
   <% unless readonly_mode? %>
-    <% failed_with_text = @recipes.select { |r| r.extraction_status == 'failed' && r.input_text.present? } %>
-    <% if failed_with_text.any? %>
+    <% if @failed_with_text_count.to_i.positive? %>
       <div class="window-pane" style="margin-bottom: 0;">
-        <%= button_to "Bulk retry failed (#{failed_with_text.size})",
+        <%= button_to "Bulk retry failed (#{@failed_with_text_count})",
               bulk_retry_failed_extractions_source_path(@source),
               method: :post,
               class: "btn",
-              data: { confirm: "Retry extraction for #{failed_with_text.size} failed chunk(s)?" } %>
+              data: { confirm: "Retry extraction for #{@failed_with_text_count} failed chunk(s)?" } %>
       </div>
     <% end %>
   <% end %>
@@ -125,14 +129,15 @@
           </tr>
         </thead>
         <tbody>
+          <% offset = ((@recipes_page - 1) * SourcesController::PER_PAGE) %>
           <% @recipes.each_with_index do |recipe, idx| %>
             <tr>
-              <td><%= idx + 1 %></td>
+              <td><%= offset + idx + 1 %></td>
               <td>
                 <%= link_to(recipe.title.presence || "(untitled)", source_recipe_path(@source, recipe)) %>
               </td>
-              <td><%= recipe.ingredients.count %></td>
-              <td><%= recipe.instructions.count %></td>
+              <td><%= @ingredient_counts&.dig(recipe.id).to_i %></td>
+              <td><%= @instruction_counts&.dig(recipe.id).to_i %></td>
               <td>
                 <span class="badge badge-<%= recipe.extraction_status == 'success' ? 'success' : 'failed' %>">
                   <%= recipe.extraction_status %>
@@ -148,6 +153,17 @@
           <% end %>
         </tbody>
       </table>
+      <% if @recipes_total_pages > 1 %>
+        <p class="pagination-links">
+          <% if @recipes_page > 1 %>
+            <%= link_to "← Previous", source_path(@source, page: @recipes_page - 1), class: "btn btn-small" %>
+          <% end %>
+          <span style="margin: 0 0.5rem;">Page <%= @recipes_page %> of <%= @recipes_total_pages %></span>
+          <% if @recipes_page < @recipes_total_pages %>
+            <%= link_to "Next →", source_path(@source, page: @recipes_page + 1), class: "btn btn-small" %>
+          <% end %>
+        </p>
+      <% end %>
     <% else %>
       <div class="empty-state">
         No recipes extracted yet.<br>

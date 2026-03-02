@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class SourcesController < ApplicationController
+  PER_PAGE = 50
+
   def index
     @sources = Source.order(publication_year: :asc)
     @sources = case params[:corpus]
@@ -9,18 +11,41 @@ class SourcesController < ApplicationController
                else @sources
                end
     @corpus_filter = params[:corpus]
-    # Count of recipes that are failed and still considered a recipe (not_a_recipe: false)
+    source_ids = @sources.select(:id)
+    # Single query: failed recipe counts per source
     @failed_recipe_counts = Recipe.unscoped
-      .where(source_id: @sources.select(:id))
+      .where(source_id: source_ids)
       .where(extraction_status: "failed")
       .where(not_a_recipe: false)
       .group(:source_id)
       .count
+    # Single query: recipe counts per source (avoids N+1 on source.recipes.count)
+    @recipe_counts = Recipe.where(source_id: source_ids).group(:source_id).count
   end
 
   def show
     @source = Source.find(params[:id])
-    @recipes = @source.recipes.order(:title)
+    page = [1, params[:page].to_i].max
+    @recipes_total = @source.recipes.count
+    @recipes_total_pages = [1, (@recipes_total.to_f / PER_PAGE).ceil].max
+    @recipes_page = page
+    @recipes = @source.recipes.order(:title).limit(PER_PAGE).offset((page - 1) * PER_PAGE).to_a
+    @failed_with_text_count = @source.recipes.unscoped
+      .where(extraction_status: "failed")
+      .where.not(input_text: [nil, ""])
+      .count
+
+    return if @recipes.empty?
+
+    recipe_ids = @recipes.map(&:id)
+    @ingredient_counts = Ingredient.joins(ingredient_group: :recipe)
+      .where(ingredient_groups: { recipe_id: recipe_ids })
+      .group("ingredient_groups.recipe_id")
+      .count
+    @instruction_counts = Instruction.joins(instruction_group: :recipe)
+      .where(instruction_groups: { recipe_id: recipe_ids })
+      .group("instruction_groups.recipe_id")
+      .count
   end
 
   def update
@@ -28,7 +53,14 @@ class SourcesController < ApplicationController
     if @source.update(source_params)
       redirect_back fallback_location: source_path(@source), notice: "Source updated."
     else
-      @recipes = @source.recipes.order(:title)
+      @recipes_total = @source.recipes.count
+      @recipes_total_pages = [1, (@recipes_total.to_f / PER_PAGE).ceil].max
+      @recipes_page = 1
+      @recipes = @source.recipes.order(:title).limit(PER_PAGE).to_a
+      @failed_with_text_count = @source.recipes.unscoped.where(extraction_status: "failed").where.not(input_text: [nil, ""]).count
+      recipe_ids = @recipes.map(&:id)
+      @ingredient_counts = recipe_ids.any? ? Ingredient.joins(ingredient_group: :recipe).where(ingredient_groups: { recipe_id: recipe_ids }).group("ingredient_groups.recipe_id").count : {}
+      @instruction_counts = recipe_ids.any? ? Instruction.joins(instruction_group: :recipe).where(instruction_groups: { recipe_id: recipe_ids }).group("instruction_groups.recipe_id").count : {}
       render :show, status: :unprocessable_entity
     end
   end
